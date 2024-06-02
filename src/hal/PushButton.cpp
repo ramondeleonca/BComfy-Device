@@ -1,5 +1,5 @@
-#ifndef PUSHBUTTON_H
-#define PUSHBUTTON_H
+#ifndef HAL_PUSHBUTTON_H
+#define HAL_PUSHBUTTON_H
 
 #include <Arduino.h>
 
@@ -7,42 +7,30 @@ class PushButton {
     private:
         int pin;
         int lastState;
-        int currentState;
-        int lastDebounceTime;
-        int debounceDelay;
+        int state;
+        int trigger;
+        void (*callback)(void) = NULL;
 
     public:
-        PushButton(int pin) {
+        PushButton(int pin, int trigger = RISING) {
             this->pin = pin;
-            this->lastState = LOW;
-            this->currentState = LOW;
-            this->lastDebounceTime = 0;
-            this->debounceDelay = 50;
+            this->trigger = trigger;
             pinMode(pin, INPUT);
-        };
+        }
 
-        bool isPressed() {
-            int reading = digitalRead(this->pin);
-            if (reading != this->lastState) {
-                this->lastDebounceTime = millis();
-            }
-
-            if ((millis() - this->lastDebounceTime) > this->debounceDelay) {
-                if (reading != this->currentState) {
-                    this->currentState = reading;
-                    if (this->currentState == HIGH) {
-                        return true;
-                    }
-                }
-            }
-
-            this->lastState = reading;
-            return false;
-        };
+        void setCallback(void (*callback)(void)) {
+            this->callback = callback;
+        }
 
         void service() {
-            this->isPressed();
-        };
+            this->lastState = this->state;
+            this->state = digitalRead(this->pin);
+            if (this->trigger == RISING && this->lastState == LOW && this->state == HIGH) {
+                if (this->callback != NULL) this->callback();
+            } else if (this->trigger == FALLING && this->lastState == HIGH && this->state == LOW) {
+                if (this->callback != NULL) this->callback();
+            }
+        }
 };
 
 #endif

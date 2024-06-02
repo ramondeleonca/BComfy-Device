@@ -1,59 +1,107 @@
-#ifndef COMFYUI_H
-#define COMFYUI_H
+#ifndef COMFYUI_BUTTON_H
+#define COMFYUI_BUTTON_H
 
 #include <Arduino.h>
 #include <Adafruit_SSD1306.h>
-#include <LinkedList.h>
-#include "comfyui/icons.h"
+#include <comfyui/elements/ComfyUIElement.h>
+#include <comfyui/types.h>
 
-class ComfyUIElement {
-    public:
-        virtual void draw(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) = 0;
-        virtual int getWidth() = 0;
-        virtual int getHeight() = 0;
-        void update() {}
-};
+// class ComfyUIButton : public ComfyUIElement {
+//     public:
+//         int x;
+//         int y;
+//         int originalX;
+//         int originalY;
+//         int width;
+//         int height;
+//         String text;
+//         int textSize;
+//         int color1;
+//         int color2;
+//         int paddingX;
+//         int paddingY;
+//         int roundness;
+//         bool selected;
+//         bool pressed;
 
-class ComfyUIFrame : public ComfyUIElement {
-    public:
-        int x;
-        int y;
-        int width;
-        int height;
-        LinkedList<ComfyUIElement*> children;
+//         ComfyUIButton(int x, int y, String text, int textSize = 1, int color1 = SSD1306_WHITE, int color2 = SSD1306_BLACK, int paddingX = 10, int paddingY = 3, int roundness = 3) {
+//             this->x = x + paddingX;
+//             this->y = y + paddingY;
+//             this->originalX = x;
+//             this->originalY = y;
+//             this->text = text;
+//             this->textSize = textSize;
+//             this->color1 = color1;
+//             this->color2 = color2;
+//             this->paddingX = paddingX;
+//             this->paddingY = paddingY;
+//             this->roundness = roundness;
+//             this->selected = false;
+//             this->pressed = false;
+//         }
 
-    public:
-        ComfyUIFrame(int x = 0, int y = 0, int width = 128, int height = 64) {
-            this->x = x;
-            this->y = y;
-            this->width = width;
-            this->height = height;
-            this->children = LinkedList<ComfyUIElement*>();
-        }
+//         bool getSelected() {
+//             return this->selected;
+//         }
 
-        void addChild(ComfyUIElement* element) {
-            this->children.add(element);
-        }
+//         void setSelected(bool selected) {
+//             this->selected = selected;
+//         }
 
-        void draw(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
-            for (int i = 0; i < children.size(); i++) {
-                ComfyUIElement* element = children.get(i);
-                element->update();
-                element->draw(display, this);
-            }
-        }
+//         bool getPressed() {
+//             return this->pressed;
+//         }
 
-        int getWidth() {
-            return this->width;
-        }
+//         void setPressed(bool pressed) {
+//             this->pressed = pressed;
+//         }
 
-        int getHeight() {
-            return this->height;
-        }
-};
+//         // TODO: PLEASE CHANGE THIS IT WORKS TERRIBLY.
+//         void update(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
+//             int16_t x1, y1;
+//             uint16_t w, h;
+//             display->getTextBounds(this->text, this->x, this->y, &x1, &y1, &w, &h);
+            
+//             if (this->selected) {
+//                 this->width = parent->getWidth() - (this->paddingX * 2);
+//                 this->x = parent->getX() + this->paddingX;
+//                 this->y = originalY;
+//             } else {
+//                 this->width = w + this->paddingX * 2;
+//                 this->x = originalX + this->paddingX;
+//                 this->y = originalY + this->paddingY;
+//             }
+
+//             this->height = h + this->paddingY * 2;
+//         }
+
+//         void draw(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
+//             display->drawRoundRect(this->x, this->y, this->width, this->height, this->roundness, this->color1);
+//             display->setTextSize(this->textSize);
+//             display->setTextColor(this->color2);
+//             display->setCursor(this->x + this->paddingX, this->y + this->paddingY);
+//             display->println(this->text);
+//         }
+
+//         int getWidth() {
+//             return this->width;
+//         }
+
+//         int getHeight() {
+//             return this->height;
+//         }
+
+//         int getX() {
+//             return this->x;
+//         }
+
+//         int getY() {
+//             return this->y;
+//         }
+// };
 
 class ComfyUIButton : public ComfyUIElement {
-    private:
+    public:
         int x;
         int y;
         String text;
@@ -143,6 +191,16 @@ class ComfyUIButton : public ComfyUIElement {
 
         void addChild(ComfyUIElement* element) {}
 
+        void update(Adafruit_SSD1306* dispaly, ComfyUIElement* parent = NULL) {}
+
+        int getX() {
+            return this->x;
+        }
+
+        int getY() {
+            return this->y;
+        }
+
         void draw(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
             // Set the text size
             display->setTextSize(this->textSize);
@@ -183,60 +241,6 @@ class ComfyUIButton : public ComfyUIElement {
             // Set text color and print the text
             display->setTextColor(this->selected ? this->color2 : this->color1);
             display->println(text);
-        }
-};
-
-class ComfyUIButtonList : public ComfyUIFrame {
-    public:
-        int spacing;
-        ComfyUIButtonList(int x = 0, int y = 0, int width = 128, int height = 64, int spacing = 3) : ComfyUIFrame(x, y, width, height) {
-            this->spacing = spacing;
-        }
-
-        void addButton(ComfyUIButton* element) {
-            element->setX(this->x);
-            element->setY(this->y + (this->children.size() * (element->getHeight() + this->spacing)));
-            this->addChild(element);
-        }
-
-        void draw(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
-            for (int i = 0; i < children.size(); i++) {
-                ComfyUIElement* element = children.get(i);
-                element->update();
-                element->draw(display, this);
-            }
-        }
-};
-
-class ComfyUI {
-    private:
-        Adafruit_SSD1306* display;
-        ComfyUIFrame root = ComfyUIFrame(0, 0, 0, 0);
-
-    public:
-        ComfyUI(Adafruit_SSD1306* display) {
-            // Set display
-            this->display = display;
-
-            // Update root frame's dimensions
-            this->root.width = display->width();
-            this->root.height = display->height();
-        }
-
-        void addElement(ComfyUIElement* element) {
-            this->root.addChild(element);
-        }
-
-        void update() {
-            // Clear display
-            display->clearDisplay();
-
-            // Draw elements (draws root frame's children recursively)
-            this->root.update();
-            this->root.draw(display, &this->root);
-
-            // Display updated display
-            display->display();
         }
 };
 

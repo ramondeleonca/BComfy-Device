@@ -6,6 +6,8 @@
 #include <WS2812FX.h>
 #include "hal/PushButton.cpp"
 #include "hal/VibrationMotor.cpp"
+#include "hal/Potentiometer.cpp"
+#include "hal/Buzzer.cpp"
 #include "comfyui/ComfyUI2.cpp"
 #include "comfyui/icons.h"
 
@@ -38,14 +40,11 @@ Adafruit_SSD1306 smallDisplay(SMALL_DISPLAY_WIDTH, SMALL_DISPLAY_HEIGHT, &smallD
 // ComfyUI
 ComfyUI bigUI(&bigDisplay);
 
-ComfyUIText text1UI = ComfyUIText(0, 0, "Hola mundo");
-ComfyUIButton button1UI = ComfyUIButton(0, 10, "Llamada");
+ComfyUIButton button1UI = ComfyUIButton(10, 10, "Llamada");
+ComfyUIButton button2UI = ComfyUIButton(10, 30, "Mensajes");
+ComfyUIButton button3UI = ComfyUIButton(10, 50, "Juegos");
 
-// ComfyUIButton button1UI = ComfyUIButton(10, 10, "Llamada", phone_outgoing, phone_outgoing_width, phone_outgoing_height);
-// ComfyUIButton button2UI = ComfyUIButton(10, 30, "Mensajes", message, message_width, message_height);
-// ComfyUIButton button3UI = ComfyUIButton(10, 50, "Juegos", game_controller, game_controller_width, game_controller_height);
-
-// ComfyUIButtonList buttonListUI = ComfyUIButtonList();
+ComfyUIButtonList buttonListUI = ComfyUIButtonList();
 
 // Buttons
 PushButton button1(13);
@@ -53,8 +52,14 @@ PushButton button2(12);
 PushButton button3(14);
 PushButton button4(27);
 
+// Potentiometer
+Potentiometer potentiometer(15);
+
 // Vibration motor
 VibrationMotor vibrationMotor(4);
+
+// Buzzer
+Buzzer buzzer(5);
 
 void setup() {
     Serial.begin(115200);
@@ -74,35 +79,54 @@ void setup() {
     smallDisplay.display();
     bigDisplay.display();
 
+    buttonListUI.addChild(&button1UI);
+    buttonListUI.addChild(&button2UI);
+    buttonListUI.addChild(&button3UI);
 
-    bigUI.addElement(&button1UI);
-
-    bigUI.addElement(&text1UI);
+    bigUI.addElement(&buttonListUI);
 
     vibrationMotor.vibrate(1000);
 }
 
 //! REMEMBER DO NOT USE DELAY IN LOOP
 unsigned long lastTime = 0;
+unsigned long lastChange = 0;
+uint changePeriod = 500;
 void loop() {
     unsigned long currentTime = millis();
     unsigned long dt = currentTime - lastTime;
 
     Serial.println("dt: " + String(dt) + "ms");
 
-    button1UI.setSelected(!button1UI.getSelected());
+    // if (currentTime - lastChange > changePeriod) {
+    //     buttonListUI.selectNext();
+    //     lastChange = currentTime;
+    // }
+
+    int potval = potentiometer.getValue();
+    int buttons = buttonListUI.getButtons();
+
+    if (potval > 0) {
+        buttonListUI.setSelectedIndex(map(potval, 0, 4000, 0, buttons - 1));
+        if (buttonListUI.getLastSelectedIndex() != buttonListUI.getSelectedIndex()) {
+            vibrationMotor.vibrate(100);
+            buzzer.beep(2000, 100);
+        }
+    }
 
     bigUI.update();
 
     smallDisplay.clearDisplay();
     smallDisplay.setTextColor(SSD1306_WHITE);
-    smallDisplay.setTextSize(2);
+    smallDisplay.setTextSize(1);
     smallDisplay.setCursor(0, 0);
     smallDisplay.print("FPS: ");
     smallDisplay.println(1000 / dt);
     smallDisplay.print("MEM: ");
     smallDisplay.print((ESP.getFreeHeap() * 100) / ESP.getHeapSize());
     smallDisplay.println("%");
+    smallDisplay.print("POT: ");
+    smallDisplay.println(potval);
     smallDisplay.display();
 
     leds.service();
@@ -114,7 +138,9 @@ void loop() {
 
     vibrationMotor.service();
 
-    delay(500);
+    buzzer.service();
+
+    // delay(500);
 
     lastTime = currentTime;
 }
