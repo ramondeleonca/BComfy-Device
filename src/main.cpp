@@ -6,7 +6,7 @@
 #include <WS2812FX.h>
 #include "hal/PushButton.cpp"
 #include "hal/VibrationMotor.cpp"
-#include "comfyui/ComfyUI.cpp"
+#include "comfyui/ComfyUI2.cpp"
 #include "comfyui/icons.h"
 
 // LED Config
@@ -38,11 +38,14 @@ Adafruit_SSD1306 smallDisplay(SMALL_DISPLAY_WIDTH, SMALL_DISPLAY_HEIGHT, &smallD
 // ComfyUI
 ComfyUI bigUI(&bigDisplay);
 
-ComfyUIButton button1UI = ComfyUIButton(10, 10, "Llamada", phone_outgoing, phone_outgoing_width, phone_outgoing_height);
-ComfyUIButton button2UI = ComfyUIButton(10, 30, "Mensajes", message, message_width, message_height);
-ComfyUIButton button3UI = ComfyUIButton(10, 50, "Juegos", game_controller, game_controller_width, game_controller_height);
+ComfyUIText text1UI = ComfyUIText(0, 0, "Hola mundo");
+ComfyUIButton button1UI = ComfyUIButton(0, 10, "Llamada");
 
-ComfyUIButtonList buttonListUI = ComfyUIButtonList();
+// ComfyUIButton button1UI = ComfyUIButton(10, 10, "Llamada", phone_outgoing, phone_outgoing_width, phone_outgoing_height);
+// ComfyUIButton button2UI = ComfyUIButton(10, 30, "Mensajes", message, message_width, message_height);
+// ComfyUIButton button3UI = ComfyUIButton(10, 50, "Juegos", game_controller, game_controller_width, game_controller_height);
+
+// ComfyUIButtonList buttonListUI = ComfyUIButtonList();
 
 // Buttons
 PushButton button1(13);
@@ -71,11 +74,12 @@ void setup() {
     smallDisplay.display();
     bigDisplay.display();
 
-    buttonListUI.addButton(&button1UI);
-    buttonListUI.addButton(&button2UI);
-    buttonListUI.addButton(&button3UI);
 
-    bigUI.addElement(&buttonListUI);
+    bigUI.addElement(&button1UI);
+
+    bigUI.addElement(&text1UI);
+
+    vibrationMotor.vibrate(1000);
 }
 
 //! REMEMBER DO NOT USE DELAY IN LOOP
@@ -83,6 +87,8 @@ unsigned long lastTime = 0;
 void loop() {
     unsigned long currentTime = millis();
     unsigned long dt = currentTime - lastTime;
+
+    Serial.println("dt: " + String(dt) + "ms");
 
     button1UI.setSelected(!button1UI.getSelected());
 
@@ -93,7 +99,10 @@ void loop() {
     smallDisplay.setTextSize(2);
     smallDisplay.setCursor(0, 0);
     smallDisplay.print("FPS: ");
-    smallDisplay.print(1000 / (float)dt);
+    smallDisplay.println(1000 / dt);
+    smallDisplay.print("MEM: ");
+    smallDisplay.print((ESP.getFreeHeap() * 100) / ESP.getHeapSize());
+    smallDisplay.println("%");
     smallDisplay.display();
 
     leds.service();
@@ -103,7 +112,9 @@ void loop() {
     button3.service();
     button4.service();
 
-    // delay(500);
+    vibrationMotor.service();
+
+    delay(500);
 
     lastTime = currentTime;
 }

@@ -6,6 +6,8 @@
 class VibrationMotor {
     private:
         int pin;
+        int started = -1;
+        int duration = 0;
 
     public:
         VibrationMotor(int pin) {
@@ -14,9 +16,9 @@ class VibrationMotor {
         };
 
         void vibrate(int duration) {
+            this->duration = duration;
+            this->started = millis();
             digitalWrite(this->pin, HIGH);
-            delay(duration);
-            digitalWrite(this->pin, LOW);
         };
 
         void vibrate() {
@@ -24,8 +26,14 @@ class VibrationMotor {
         };
 
         void stop() {
+            this->duration = 0;
+            this->started = -1;
             digitalWrite(this->pin, LOW);
         };
+
+        void service() {
+            if (this->started != -1 && millis() - this->started > this->duration) this->stop();
+        }
 };
 
 #endif

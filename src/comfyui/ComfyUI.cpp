@@ -72,7 +72,7 @@ class ComfyUIButton : public ComfyUIElement {
         int height;
     
     public:
-        ComfyUIButton(int x = 0, int y = 0, String text = "ComfyUI Button", const unsigned char icon[] = NULL, const unsigned int iconWidth = 0, const unsigned int iconHeight = 0, int paddingX = 10, int paddingY = 3, int textSize = 1, int color1 = SSD1306_WHITE, int color2 = SSD1306_BLACK, int roundness = 3) {
+        ComfyUIButton(int x = 0, int y = 0, String text = "ComfyUI Button", const unsigned char icon[] = NULL, const unsigned int iconWidth = 0, const unsigned int iconHeight = 0, int paddingX = 10, int paddingY = 5, int textSize = 1, int color1 = SSD1306_WHITE, int color2 = SSD1306_BLACK, int roundness = 3) {
             this->x = x;
             this->y = y;
             this->text = text;
@@ -138,7 +138,7 @@ class ComfyUIButton : public ComfyUIElement {
         }
 
         int getHeight() {
-            return 32;
+            return 15;
         }
 
         void addChild(ComfyUIElement* element) {}
