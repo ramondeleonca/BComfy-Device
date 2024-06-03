@@ -40,9 +40,9 @@ Adafruit_SSD1306 smallDisplay(SMALL_DISPLAY_WIDTH, SMALL_DISPLAY_HEIGHT, &smallD
 // ComfyUI
 ComfyUI bigUI(&bigDisplay);
 
-ComfyUIButton button1UI = ComfyUIButton(10, 10, "Llamada");
-ComfyUIButton button2UI = ComfyUIButton(10, 30, "Mensajes");
-ComfyUIButton button3UI = ComfyUIButton(10, 50, "Juegos");
+ComfyUIButton button1UI = ComfyUIButton(10, 10, "Llamada", volup, volup_width, volup_height);
+ComfyUIButton button2UI = ComfyUIButton(10, 30, "Mensajes", sdcardmounted, sdcardmounted_width, sdcardmounted_height);
+ComfyUIButton button3UI = ComfyUIButton(10, 50, "Juegos", gamemode, gamemode_width, gamemode_height);
 
 ComfyUIButtonList buttonListUI = ComfyUIButtonList();
 
@@ -76,14 +76,33 @@ void setup() {
     smallDisplay.begin(SSD1306_SWITCHCAPVCC, SMALL_DISPLAY_ADDRESS);
     bigDisplay.begin(SSD1306_SWITCHCAPVCC, BIG_DISPLAY_ADDRESS);
 
-    smallDisplay.display();
-    bigDisplay.display();
-
     buttonListUI.addChild(&button1UI);
     buttonListUI.addChild(&button2UI);
     buttonListUI.addChild(&button3UI);
 
     bigUI.addElement(&buttonListUI);
+
+    button2.setOnRising([]() {
+        buttonListUI.selectPrevious();
+        vibrationMotor.vibrate(100);
+        buzzer.beep(1500, 100);
+    });
+
+    button3.setOnRising([]() {
+        buttonListUI.selectNext();
+        vibrationMotor.vibrate(100);
+        buzzer.beep(1500, 100);
+    });
+
+    button4.setOnRising([]() {
+        buttonListUI.getSelectedButton()->setPressed(true);
+        vibrationMotor.vibrate(250);
+        buzzer.beep(200, 250);
+    });
+
+    button4.setOnFalling([]() {
+        buttonListUI.getSelectedButton()->setPressed(false);
+    });
 
     vibrationMotor.vibrate(1000);
 }
@@ -96,23 +115,22 @@ void loop() {
     unsigned long currentTime = millis();
     unsigned long dt = currentTime - lastTime;
 
-    Serial.println("dt: " + String(dt) + "ms");
-
     // if (currentTime - lastChange > changePeriod) {
-    //     buttonListUI.selectNext();
+    //     button1UI.setSelected(!button1UI.isSelected());
+    //     Serial.println(button1UI.isSelected() ? "Selected" : "Not Selected");
     //     lastChange = currentTime;
     // }
 
     int potval = potentiometer.getValue();
-    int buttons = buttonListUI.getButtons();
+    // int buttons = buttonListUI.getButtons();
 
-    if (potval > 0) {
-        buttonListUI.setSelectedIndex(map(potval, 0, 4000, 0, buttons - 1));
-        if (buttonListUI.getLastSelectedIndex() != buttonListUI.getSelectedIndex()) {
-            vibrationMotor.vibrate(100);
-            buzzer.beep(2000, 100);
-        }
-    }
+    // if (potval > 0) {
+    //     buttonListUI.setSelectedIndex(map(potval, 0, 4000, 0, buttons - 1));
+    //     if (buttonListUI.getLastSelectedIndex() != buttonListUI.getSelectedIndex()) {
+    //         vibrationMotor.vibrate(100);
+    //         buzzer.beep(2000, 100);
+    //     }
+    // }
 
     bigUI.update();
 

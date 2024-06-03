@@ -8,27 +8,31 @@ class PushButton {
         int pin;
         int lastState;
         int state;
-        int trigger;
-        void (*callback)(void) = NULL;
+        void (*onRising)(void) = NULL;
+        void (*onFalling)(void) = NULL;
 
     public:
-        PushButton(int pin, int trigger = RISING) {
+        PushButton(int pin) {
             this->pin = pin;
-            this->trigger = trigger;
-            pinMode(pin, INPUT);
+            pinMode(pin, INPUT_PULLDOWN);
         }
 
-        void setCallback(void (*callback)(void)) {
-            this->callback = callback;
+        void setOnRising(void (*onRising)(void)) {
+            this->onRising = onRising;
+        }
+
+        void setOnFalling(void (*onFalling)(void)) {
+            this->onFalling = onFalling;
         }
 
         void service() {
             this->lastState = this->state;
             this->state = digitalRead(this->pin);
-            if (this->trigger == RISING && this->lastState == LOW && this->state == HIGH) {
-                if (this->callback != NULL) this->callback();
-            } else if (this->trigger == FALLING && this->lastState == HIGH && this->state == LOW) {
-                if (this->callback != NULL) this->callback();
+
+            if (this->lastState != this->state && this->state == RISING) {
+                if (this->onRising != NULL) this->onRising();
+            } else if (this->lastState != this->state && this->state == FALLING) {
+                if (this->onFalling != NULL) this->onFalling();
             }
         }
 };

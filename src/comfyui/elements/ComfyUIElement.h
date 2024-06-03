@@ -4,8 +4,13 @@
 #include <Adafruit_SSD1306.h>
 #include "comfyui/enums.h"
 #include "comfyui/types.h"
+#include <LinkedList.h>
 
 class ComfyUIElement {
+    private:
+        ComfyUIElement* parent = NULL;
+        
+
     public:
         /* Draws the element with precalculated values from the update function */
         virtual void draw(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) = 0;
@@ -24,6 +29,15 @@ class ComfyUIElement {
 
         /* Returns y position of element*/
         virtual int getY() = 0;
+
+        /* Gets the element's parent */
+        ComfyUIElement* getParent() {
+            return this->parent;
+        };
+
+        void setParent(ComfyUIElement* parent) {
+            this->parent = parent;
+        };
 
         /* Returns bounding box of element*/
         comfy_bounding_box getBoundingBox() {

@@ -5,136 +5,110 @@
 #include <Adafruit_SSD1306.h>
 #include <comfyui/elements/ComfyUIElement.h>
 #include <comfyui/types.h>
-
-// class ComfyUIButton : public ComfyUIElement {
-//     public:
-//         int x;
-//         int y;
-//         int originalX;
-//         int originalY;
-//         int width;
-//         int height;
-//         String text;
-//         int textSize;
-//         int color1;
-//         int color2;
-//         int paddingX;
-//         int paddingY;
-//         int roundness;
-//         bool selected;
-//         bool pressed;
-
-//         ComfyUIButton(int x, int y, String text, int textSize = 1, int color1 = SSD1306_WHITE, int color2 = SSD1306_BLACK, int paddingX = 10, int paddingY = 3, int roundness = 3) {
-//             this->x = x + paddingX;
-//             this->y = y + paddingY;
-//             this->originalX = x;
-//             this->originalY = y;
-//             this->text = text;
-//             this->textSize = textSize;
-//             this->color1 = color1;
-//             this->color2 = color2;
-//             this->paddingX = paddingX;
-//             this->paddingY = paddingY;
-//             this->roundness = roundness;
-//             this->selected = false;
-//             this->pressed = false;
-//         }
-
-//         bool getSelected() {
-//             return this->selected;
-//         }
-
-//         void setSelected(bool selected) {
-//             this->selected = selected;
-//         }
-
-//         bool getPressed() {
-//             return this->pressed;
-//         }
-
-//         void setPressed(bool pressed) {
-//             this->pressed = pressed;
-//         }
-
-//         // TODO: PLEASE CHANGE THIS IT WORKS TERRIBLY.
-//         void update(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
-//             int16_t x1, y1;
-//             uint16_t w, h;
-//             display->getTextBounds(this->text, this->x, this->y, &x1, &y1, &w, &h);
-            
-//             if (this->selected) {
-//                 this->width = parent->getWidth() - (this->paddingX * 2);
-//                 this->x = parent->getX() + this->paddingX;
-//                 this->y = originalY;
-//             } else {
-//                 this->width = w + this->paddingX * 2;
-//                 this->x = originalX + this->paddingX;
-//                 this->y = originalY + this->paddingY;
-//             }
-
-//             this->height = h + this->paddingY * 2;
-//         }
-
-//         void draw(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
-//             display->drawRoundRect(this->x, this->y, this->width, this->height, this->roundness, this->color1);
-//             display->setTextSize(this->textSize);
-//             display->setTextColor(this->color2);
-//             display->setCursor(this->x + this->paddingX, this->y + this->paddingY);
-//             display->println(this->text);
-//         }
-
-//         int getWidth() {
-//             return this->width;
-//         }
-
-//         int getHeight() {
-//             return this->height;
-//         }
-
-//         int getX() {
-//             return this->x;
-//         }
-
-//         int getY() {
-//             return this->y;
-//         }
-// };
+#include "comfyui/easings.h"
 
 class ComfyUIButton : public ComfyUIElement {
-    public:
+    private:
+        // Target bounds
         int x;
+        int lastX;
+        int originalX;
+
         int y;
-        String text;
+        int lastY;
+        int originalY;
+
+        int width;
+        int lastWidth;
+
+        int height;
+        int lastHeight;
+
+        // Current bounds
+        int currentX;
+        int currentY;
+        int currentWidth;
+        int currentHeight;
+
+        // Padding
         int paddingX;
         int paddingY;
+
+        // Text
+        String text;
         int textSize;
+        
+        // Colors
         int color1;
         int color2;
+
+        // Style
         int roundness;
+
+        // State
         bool selected = false;
+        bool pressed = false;
+
+        // Icon
         unsigned char icon[64];
         unsigned int iconWidth;
         unsigned int iconHeight;
 
-        int width;
-        int height;
-    
+        // Animation
+        int startedAnimatingX;
+        int startedAnimatingY;
+        int startedAnimatingWidth;
+        int startedAnimatingHeight;
+        bool firstUpdate = true;
+
     public:
         ComfyUIButton(int x = 0, int y = 0, String text = "ComfyUI Button", const unsigned char icon[] = NULL, const unsigned int iconWidth = 0, const unsigned int iconHeight = 0, int paddingX = 10, int paddingY = 5, int textSize = 1, int color1 = SSD1306_WHITE, int color2 = SSD1306_BLACK, int roundness = 3) {
             this->x = x;
+            this->lastX = x;
+            this->originalX = x;
             this->y = y;
+            this->lastY = y;
+            this->originalY = y;
+            this->currentX = x;
+            this->currentY = y;
             this->text = text;
-            if (icon != NULL) {
-                memcpy(this->icon, icon, sizeof(this->icon));
-                this->iconWidth = iconWidth;
-                this->iconHeight = iconHeight;
-            }
             this->paddingX = paddingX;
             this->paddingY = paddingY;
             this->textSize = textSize;
             this->color1 = color1;
             this->color2 = color2;
             this->roundness = roundness;
+            this->iconWidth = iconWidth;
+            this->iconHeight = iconHeight;
+            if (icon != NULL) memcpy(this->icon, icon, sizeof(this->icon));
+        }
+
+        void setSelected(bool selected) {
+            this->selected = selected;
+        }
+
+        void setPressed(bool pressed) {
+            this->pressed = pressed;
+        }
+
+        bool isSelected() {
+            return this->selected;
+        }
+
+        int getWidth() {
+            return this->currentWidth;
+        }
+
+        int getHeight() {
+            return this->currentHeight;
+        }
+
+        int getX() {
+            return this->currentX;
+        }
+
+        int getY() {
+            return this->currentY;
         }
 
         void setX(int x) {
@@ -145,103 +119,99 @@ class ComfyUIButton : public ComfyUIElement {
             this->y = y;
         }
 
-        void setText(String text) {
-            this->text = text;
-        }
+        void update(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
+            // Get the text bounds
+            display->setTextSize(this->textSize);
+            display->setTextWrap(false);
+            int16_t _;
+            uint16_t textWidth, textHeight;
+            display->getTextBounds(text, 0, 0, &_, &_, &textWidth, &textHeight);
 
-        void setPaddingX(int paddingX) {
-            this->paddingX = paddingX;
-        }
+            int width = textWidth + this->paddingX * 2;
+            int height = textHeight + this->paddingY * 2;
 
-        void setPaddingY(int paddingY) {
-            this->paddingY = paddingY;
-        }
+            // First update
+            if (this->firstUpdate) {
+                this->width = width;
+                this->lastWidth = width;
+                this->currentWidth = width;
 
-        void setTextSize(int textSize) {
-            this->textSize = textSize;
-        }
+                this->height = height;
+                this->lastHeight = height;
+                this->currentHeight = height;
 
-        void setColor1(int color1) {
-            this->color1 = color1;
-        }
+                this->firstUpdate = false;
+            }
 
-        void setColor2(int setColor2) {
-            this->color2 = color2;
-        }
+            // Set correct style
+            // TODO: FIX THIS, GET YOUR POSITIONS RIGHT.
+            if (this->pressed) {
+                this->x = parent->getX() + this->paddingX - 5;
+                this->width = parent->getWidth() - this->paddingX * 2 + 10;
+                this->height = height + 10;
+            } else {
+                if (this->selected) {
+                    this->x = parent->getX() + this->paddingX;
+                    this->width = parent->getWidth() - this->paddingX * 2;
+                } else {
+                    this->x = this->originalX;
+                    this->width = width + (this->iconWidth > 0 ? this->iconWidth + (this->paddingX * 2) : 0);
+                }
+            }
 
-        void setRoundness(int roundness) {
-            this->roundness = roundness;
-        }
+            // Check if properties changed
+            if (this->x != this->lastX) {
+                this->startedAnimatingX = millis();
+                this->lastX = this->x;
+            }
 
-        void setSelected(bool selected) {
-            this->selected = selected;
-        }
+            if (this->y != this->lastY) {
+                this->startedAnimatingY = millis();
+                this->lastY = this->y;
+            }
 
-        bool getSelected() {
-            return this->selected;
-        }
+            if (this->width != this->lastWidth) {
+                this->startedAnimatingWidth = millis();
+                this->lastWidth = this->width;
+            }
 
-        int getWidth() {
-            return 0;
-        }
+            if (this->height != this->lastHeight) {
+                this->startedAnimatingHeight = millis();
+                this->lastHeight = this->height;
+            }
 
-        int getHeight() {
-            return 15;
-        }
-
-        void addChild(ComfyUIElement* element) {}
-
-        void update(Adafruit_SSD1306* dispaly, ComfyUIElement* parent = NULL) {}
-
-        int getX() {
-            return this->x;
-        }
-
-        int getY() {
-            return this->y;
+            // Animate
+            int time = millis();
+            if (this->currentX != this->x) this->currentX += (Ease::Cubic::Out(((float)time - (float)this->startedAnimatingX) / 1000.) * (this->x - this->currentX));
+            if (this->currentY != this->y) this->currentY += (Ease::Cubic::Out(((float)time - (float)this->startedAnimatingY) / 1000.) * (this->y - this->currentY));
+            if (this->currentWidth != this->width) this->currentWidth += (Ease::Cubic::Out(((float)time - (float)this->startedAnimatingWidth) / 1000.) * (this->width - this->currentWidth));
+            if (this->currentHeight != this->height) this->currentHeight += (Ease::Cubic::Out(((float)time - (float)this->startedAnimatingHeight) / 1000.) * (this->height - this->currentHeight));
         }
 
         void draw(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
-            // Set the text size
-            display->setTextSize(this->textSize);
-            
-            // Calculate icon padding if an icon is present
-            int iconPadding = (this->iconWidth > 0) ? this->iconWidth + (paddingX * 2) : 0;
-            
-            // Set the cursor position with consideration for icon padding
-            display->setCursor(x + iconPadding + paddingX, y + paddingY);
-            
-            // Get the text bounds
-            int16_t textX, textY; // These are unused but required by getTextBounds
-            uint16_t textWidth, textHeight;
-            display->getTextBounds(text, display->getCursorX(), display->getCursorY(), &textX, &textY, &textWidth, &textHeight);
-            
-            // Calculate rectangle dimensions
-            int rectWidth = this->selected ? parent->getWidth() - paddingX : textWidth + (paddingX * 2) + iconPadding;
-            int rectHeight = textHeight + (paddingY * 2);
-
-            // Store width and height
-            this->width = rectWidth;
-            this->height = rectHeight;
-
-            if (this->selected) {
-                // Draw filled rectangle for selected state
-                display->fillRoundRect(x, y, rectWidth, rectHeight, this->roundness, this->color1);
-                // Draw right arrow bitmap
-                display->drawBitmap(x + rectWidth - arrow_right_width - paddingX, y + (rectHeight - arrow_right_height) / 2, arrow_right, arrow_right_width, arrow_right_height, this->color2);
+            // Draw button
+            if (this->pressed) {
+                display->setTextColor(this->color2);
+                display->fillRoundRect(this->currentX, this->currentY, this->currentWidth, this->currentHeight, this->roundness, this->color1);
+                if (this->selected) display->drawBitmap(this->currentX + this->currentWidth - arrow_right_width - paddingX, this->currentY + (this->currentHeight / 2) - (arrow_right_height / 2), arrow_right, arrow_right_width, arrow_right_height, this->color2);
             } else {
-                // Draw outlined rectangle for non-selected state
-                display->drawRoundRect(x, y, rectWidth, rectHeight, this->roundness, this->color1);
+                display->setTextColor(this->color1);
+                display->drawRoundRect(this->currentX, this->currentY, this->currentWidth, this->currentHeight, this->roundness, this->color1);
+                if (this->selected) {
+                    display->drawLine(this->currentX, this->currentY + this->currentHeight - 2, this->currentX + this->currentWidth - 2, this->currentY + currentHeight - 2, this->color1);
+                    display->drawBitmap(this->currentX + this->currentWidth - arrow_right_width - paddingX, this->currentY + (this->currentHeight / 2) - (arrow_right_height / 2), arrow_right, arrow_right_width, arrow_right_height, this->color1);
+                }
             }
-            
-            // Draw icon if present
-            if (this->iconWidth > 0) 
-                display->drawBitmap(x + paddingX, y + paddingY, this->icon, this->iconWidth, this->iconHeight, this->selected ? this->color2 : this->color1);
-            
-            // Set text color and print the text
-            display->setTextColor(this->selected ? this->color2 : this->color1);
-            display->println(text);
+
+            // Draw icon
+            if (this->iconWidth > 0) display->drawBitmap(this->currentX + this->paddingX, this->currentY + (this->currentHeight / 2) - (this->iconHeight / 2), this->icon, this->iconWidth, this->iconHeight, (this->pressed ? this->color2 : this->color1));
+
+            // Draw text
+            display->setTextSize(this->textSize);
+            display->setCursor(this->currentX + this->paddingX + (this->iconWidth > 0 ? this->paddingX + this->iconWidth : 0), this->currentY + this->paddingY + (this->pressed ? 5 : 0));
+            display->print(this->text);
         }
+
 };
 
 #endif

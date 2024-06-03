@@ -16,6 +16,7 @@ class ComfyUIButtonList : public ComfyUIFrame {
         ComfyUIButtonList(int x = 0, int y = 0, int width = 128, int height = 64) : ComfyUIFrame(x, y, width, height) {}
 
         void addChild(ComfyUIButton* button) {
+            button->setParent(this);
             this->children.add(button);
         }
 
@@ -28,13 +29,11 @@ class ComfyUIButtonList : public ComfyUIFrame {
         }
 
         void update(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
-            int y = this->y;
+            this->y = -this->selectedIndex * 20;
+
             for (int i = 0; i < children.size(); i++) {
                 ComfyUIButton* button = (ComfyUIButton*) children.get(i);
                 button->setSelected(i == this->selectedIndex);
-                button->x = this->x + button->paddingX;
-                button->y = y + button->paddingY;
-                y += button->height + button->paddingY;
             }
         }
 
@@ -70,6 +69,7 @@ class ComfyUIButtonList : public ComfyUIFrame {
             this->selectedIndex--;
             if (this->selectedIndex < 0) this->selectedIndex = this->children.size() - 1;
         }
+
 };
 
 #endif

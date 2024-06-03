@@ -22,6 +22,7 @@ class ComfyUIFrame : public ComfyUIElement {
         }
 
         void addChild(ComfyUIElement* element) {
+            element->setParent(this);
             this->children.add(element);
         }
 
@@ -33,7 +34,9 @@ class ComfyUIFrame : public ComfyUIElement {
             }
         }
 
-        void update(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {}
+        void update(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
+            
+        }
 
         int getWidth() {
             return this->width;
