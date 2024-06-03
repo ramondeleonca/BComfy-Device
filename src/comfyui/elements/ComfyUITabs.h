@@ -45,7 +45,6 @@ class ComfyUITabs : public ComfyUIFrame {
                 this->tabsList->update(display, this);
                 this->tabsList->draw(display, this);
             } else {
-                Serial.println(this->currentTab);
                 for (int i = 0; i < this->tabs.size(); i++) {
                     comfyui_tab tab = this->tabs.get(i);
                     if (tab.name == this->currentTab) {
