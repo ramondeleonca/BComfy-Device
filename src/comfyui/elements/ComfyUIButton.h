@@ -48,6 +48,7 @@ class ComfyUIButton : public ComfyUIElement {
         // State
         bool selected = false;
         bool pressed = false;
+        bool lastPressed = false;
 
         // Icon
         unsigned char icon[64];
@@ -60,6 +61,9 @@ class ComfyUIButton : public ComfyUIElement {
         int startedAnimatingWidth;
         int startedAnimatingHeight;
         bool firstUpdate = true;
+
+        // Pressed callback
+        void (*pressedCallback)() = NULL;
 
     public:
         ComfyUIButton(int x = 0, int y = 0, String text = "ComfyUI Button", const unsigned char icon[] = NULL, const unsigned int iconWidth = 0, const unsigned int iconHeight = 0, int paddingX = 10, int paddingY = 5, int textSize = 1, int color1 = SSD1306_WHITE, int color2 = SSD1306_BLACK, int roundness = 3) {
@@ -119,6 +123,10 @@ class ComfyUIButton : public ComfyUIElement {
             this->y = y;
         }
 
+        void setPressedCallback(void (*pressedCallback)()) {
+            this->pressedCallback = pressedCallback;
+        }
+
         void update(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
             // Get the text bounds
             display->setTextSize(this->textSize);
@@ -161,6 +169,11 @@ class ComfyUIButton : public ComfyUIElement {
             }
 
             this->y = parent->getY() + this->originalY - (this->selected ? 5 : 0);
+
+            // Check if button is pressed
+            if (this->pressed && !this->lastPressed) {
+                if (this->pressedCallback != NULL) this->pressedCallback();
+            }
 
             // Check if properties changed
             if (this->x != this->lastX) {

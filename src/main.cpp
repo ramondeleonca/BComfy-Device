@@ -10,6 +10,7 @@
 #include "hal/Buzzer.cpp"
 #include "comfyui/ComfyUI2.cpp"
 #include "comfyui/icons.h"
+#include "comfyui/elements/ComfyUITabs.h"
 
 // LED Config
 const int LED_PIN = 2;
@@ -45,6 +46,16 @@ ComfyUIButton button2UI = ComfyUIButton(10, 30, "Mensajes", sdcardmounted, sdcar
 ComfyUIButton button3UI = ComfyUIButton(10, 50, "Juegos", gamemode, gamemode_width, gamemode_height);
 
 ComfyUIButtonList buttonListUI = ComfyUIButtonList();
+
+ComfyUITabs tabsUI = ComfyUITabs();
+
+ComfyUIFrame llamadaFrame = ComfyUIFrame();
+ComfyUIFrame mensajesFrame = ComfyUIFrame();
+ComfyUIFrame juegosFrame = ComfyUIFrame();
+
+ComfyUIText llamadaText = ComfyUIText(10, 10, "Llamada");
+ComfyUIText mensajesText = ComfyUIText(10, 10, "Mensajes");
+ComfyUIText juegosText = ComfyUIText(10, 10, "Juegos");
 
 // Buttons
 PushButton button1(13);
@@ -104,7 +115,35 @@ void setup() {
     buttonListUI.addChild(&button2UI);
     buttonListUI.addChild(&button3UI);
 
-    bigUI.addElement(&buttonListUI);
+    tabsUI.setTabsList(&buttonListUI);
+
+    llamadaFrame.addChild(&llamadaText);
+    mensajesFrame.addChild(&mensajesText);
+    juegosFrame.addChild(&juegosText);
+    
+    tabsUI.addTab("Llamada", &llamadaFrame);
+    tabsUI.addTab("Mensajes", &mensajesFrame);
+    tabsUI.addTab("Juegos", &juegosFrame);
+
+    button1UI.setPressedCallback([]() {
+        tabsUI.setTab("Llamada");
+    });
+
+    button2UI.setPressedCallback([]() {
+        tabsUI.setTab("Mensajes");
+    });
+
+    button3UI.setPressedCallback([]() {
+        tabsUI.setTab("Juegos");
+    });
+
+    button1.setOnRising([]() {
+        tabsUI.setTab();
+        vibrationMotor.vibrate(100);
+        buzzer.beep(1500, 100);
+    });
+
+    bigUI.addElement(&tabsUI);
 
     button2.setOnRising([]() {
         buttonListUI.selectPrevious();
@@ -147,7 +186,7 @@ uint changePeriod = 500;
 void loop() {
     unsigned long currentTime = millis();
     dt = currentTime - lastTime;
-    Serial.println("dt: " + String(dt));
+    // Serial.println("dt: " + String(dt));
 
     bigUI.update();
 

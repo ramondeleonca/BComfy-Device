@@ -3,8 +3,8 @@
 
 #include <Adafruit_SSD1306.h>
 #include "comfyui/enums.h"
-#include "comfyui/types.h"
 #include <LinkedList.h>
+#include "comfyui/types.h"
 
 class ComfyUIElement {
     private:
