@@ -29,12 +29,12 @@ class ComfyUIButtonList : public ComfyUIFrame {
         }
 
         void update(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
-            this->y = -this->selectedIndex * 20;
-
             for (int i = 0; i < children.size(); i++) {
                 ComfyUIButton* button = (ComfyUIButton*) children.get(i);
                 button->setSelected(i == this->selectedIndex);
             }
+
+            this->y = -20 * this->selectedIndex;
         }
 
         int getSelectedIndex() {

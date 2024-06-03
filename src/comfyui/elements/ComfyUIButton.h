@@ -157,7 +157,10 @@ class ComfyUIButton : public ComfyUIElement {
                     this->x = this->originalX;
                     this->width = width + (this->iconWidth > 0 ? this->iconWidth + (this->paddingX * 2) : 0);
                 }
+                this->height = height;
             }
+
+            this->y = parent->getY() + this->originalY - (this->selected ? 5 : 0);
 
             // Check if properties changed
             if (this->x != this->lastX) {

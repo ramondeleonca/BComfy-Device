@@ -61,6 +61,30 @@ VibrationMotor vibrationMotor(4);
 // Buzzer
 Buzzer buzzer(5);
 
+// Loops
+unsigned long dt = 0;
+
+// TODO: Rename task to backgroundLoop
+TaskHandle_t smallDisplayTask;
+void updateSmallDisplay(void *params) {
+    while (true) {
+        smallDisplay.clearDisplay();
+        smallDisplay.setTextColor(SSD1306_WHITE);
+        smallDisplay.setTextSize(2);
+        smallDisplay.setCursor(0, 0);
+        smallDisplay.print("FPS: ");
+        smallDisplay.println(1000 / (int)dt);
+        smallDisplay.print("MEM: ");
+        smallDisplay.print((ESP.getFreeHeap() * 100) / ESP.getHeapSize());
+        smallDisplay.println("%");
+        smallDisplay.display();
+
+        leds.service();
+        
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     gpsSerial.begin(9600, SERIAL_8N1, GPS_RX, GPS_TX);
@@ -105,6 +129,15 @@ void setup() {
     });
 
     vibrationMotor.vibrate(1000);
+
+    xTaskCreate(
+        updateSmallDisplay,
+        "updateSmallDisplay",
+        4096,
+        NULL,
+        1,
+        &smallDisplayTask
+    );
 }
 
 //! REMEMBER DO NOT USE DELAY IN LOOP
@@ -113,41 +146,10 @@ unsigned long lastChange = 0;
 uint changePeriod = 500;
 void loop() {
     unsigned long currentTime = millis();
-    unsigned long dt = currentTime - lastTime;
-
-    // if (currentTime - lastChange > changePeriod) {
-    //     button1UI.setSelected(!button1UI.isSelected());
-    //     Serial.println(button1UI.isSelected() ? "Selected" : "Not Selected");
-    //     lastChange = currentTime;
-    // }
-
-    int potval = potentiometer.getValue();
-    // int buttons = buttonListUI.getButtons();
-
-    // if (potval > 0) {
-    //     buttonListUI.setSelectedIndex(map(potval, 0, 4000, 0, buttons - 1));
-    //     if (buttonListUI.getLastSelectedIndex() != buttonListUI.getSelectedIndex()) {
-    //         vibrationMotor.vibrate(100);
-    //         buzzer.beep(2000, 100);
-    //     }
-    // }
+    dt = currentTime - lastTime;
+    Serial.println("dt: " + String(dt));
 
     bigUI.update();
-
-    smallDisplay.clearDisplay();
-    smallDisplay.setTextColor(SSD1306_WHITE);
-    smallDisplay.setTextSize(1);
-    smallDisplay.setCursor(0, 0);
-    smallDisplay.print("FPS: ");
-    smallDisplay.println(1000 / dt);
-    smallDisplay.print("MEM: ");
-    smallDisplay.print((ESP.getFreeHeap() * 100) / ESP.getHeapSize());
-    smallDisplay.println("%");
-    smallDisplay.print("POT: ");
-    smallDisplay.println(potval);
-    smallDisplay.display();
-
-    leds.service();
 
     button1.service();
     button2.service();
@@ -157,8 +159,6 @@ void loop() {
     vibrationMotor.service();
 
     buzzer.service();
-
-    // delay(500);
 
     lastTime = currentTime;
 }

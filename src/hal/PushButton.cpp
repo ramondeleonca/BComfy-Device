@@ -29,10 +29,12 @@ class PushButton {
             this->lastState = this->state;
             this->state = digitalRead(this->pin);
 
-            if (this->lastState != this->state && this->state == RISING) {
-                if (this->onRising != NULL) this->onRising();
-            } else if (this->lastState != this->state && this->state == FALLING) {
-                if (this->onFalling != NULL) this->onFalling();
+            if (this->state != this->lastState) {
+                if (this->state == HIGH) {
+                    if (this->onRising != NULL) this->onRising();
+                } else {
+                    if (this->onFalling != NULL) this->onFalling();
+                }
             }
         }
 };

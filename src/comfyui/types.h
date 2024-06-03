@@ -10,4 +10,15 @@ struct comfy_bounding_box {
     int height;
 };
 
+struct comfy_style {
+    int x;
+    int y;
+    int width;
+    int height;
+    int paddingX;
+    int paddingY;
+    int marginX;
+    int marginY;
+};
+
 #endif
