@@ -4,6 +4,7 @@
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
 #include <WS2812FX.h>
+#include <BluetoothSerial.h>
 #include "hal/PushButton.cpp"
 #include "hal/VibrationMotor.cpp"
 #include "hal/Potentiometer.cpp"
@@ -11,12 +12,37 @@
 #include "comfyui/ComfyUI2.cpp"
 #include "comfyui/icons.h"
 #include "comfyui/elements/ComfyUITabs.h"
+#include "aikey.h"
+#include <WiFi.h>
+#include <Preferences.h>
+#include "lib/Commands.cpp"
+#include <ArduinoJson.h>
+
+// Device config
+const String PRODUCT_NAME = "BComfy";
+const String PRODUCT_VERSION = "0.0.1";
+const String SOFTWARE_VERSION = "0.0.1";
+const String DEVICE_ID = WiFi.macAddress().substring(0, 2);
+const String DEVICE_NAME = PRODUCT_NAME + "." + DEVICE_ID;
+
+// AI Config
+// * PROVISION API KEY IN aikey.h
+const String OPENAI_API_KEY = AI_KEY;
+const String OPENAI_MODEL = "gpt-3.5-turbo-0125";
+const String OPENAI_CHAT_SYSTEM = "Your job is to generate motivational messages for a person with anxiety, these messages must not exceed 100 tokens, return only the message";
+const int OPENAI_CHAT_TOKENS = 200;
+const float OPENAI_CHAT_TEMPERATURE = 0.7;
+const float OPENAI_CHAT_PRESENCE_PENALTY = 0.5;
+const float OPENAI_CHAT_FREQUENCY_PENALTY = 0.5;
 
 // LED Config
 const int LED_PIN = 2;
 const int LED_COUNT = 10;
 int LED_BRIGHTNESS = 100;
 WS2812FX leds = WS2812FX(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+// Bluetooth Config
+BluetoothSerial bluetoothSerial;
 
 // GPS Config
 const int GPS_RX = 16;
@@ -25,11 +51,13 @@ HardwareSerial gpsSerial(1);
 TinyGPSPlus gps;
 
 // Displays config
+// * BIG DISPLAY
 const int BIG_DISPLAY_WIDTH = 128;
 const int BIG_DISPLAY_HEIGHT = 64;
 const int BIG_DISPLAY_ADDRESS = 0x3C;
 Adafruit_SSD1306 bigDisplay(BIG_DISPLAY_WIDTH, BIG_DISPLAY_HEIGHT, &Wire, -1);
 
+// * SMALL DISPLAY
 const int SMALL_DISPLAY_WIDTH = 128;
 const int SMALL_DISPLAY_HEIGHT = 32;
 const int SMALL_DISPLAY_ADDRESS = 0x3C;
@@ -38,24 +66,34 @@ const int SMALL_DISPLAY_SCL = 19;
 TwoWire smallDisplayWire(1);
 Adafruit_SSD1306 smallDisplay(SMALL_DISPLAY_WIDTH, SMALL_DISPLAY_HEIGHT, &smallDisplayWire, -1);
 
+// Preferences
+Preferences preferences;
+
+// Context
+enum context_t {
+    CALL,
+    MESSAGES,
+    GAMES
+};
+
 // ComfyUI
 ComfyUI bigUI(&bigDisplay);
 
-ComfyUIButton button1UI = ComfyUIButton(10, 10, "Llamada", volup, volup_width, volup_height);
-ComfyUIButton button2UI = ComfyUIButton(10, 30, "Mensajes", sdcardmounted, sdcardmounted_width, sdcardmounted_height);
-ComfyUIButton button3UI = ComfyUIButton(10, 50, "Juegos", gamemode, gamemode_width, gamemode_height);
+ComfyUIButton callButton = ComfyUIButton(10, 10, "Llamada", volup, volup_width, volup_height);
+ComfyUIButton messagesButton = ComfyUIButton(10, 30, "Mensajes", sdcardmounted, sdcardmounted_width, sdcardmounted_height);
+ComfyUIButton gamesButton = ComfyUIButton(10, 50, "Juegos", gamemode, gamemode_width, gamemode_height);
 
-ComfyUIButtonList buttonListUI = ComfyUIButtonList();
+ComfyUIButtonList buttonList = ComfyUIButtonList();
 
 ComfyUITabs tabsUI = ComfyUITabs();
 
-ComfyUIFrame llamadaFrame = ComfyUIFrame();
-ComfyUIFrame mensajesFrame = ComfyUIFrame();
-ComfyUIFrame juegosFrame = ComfyUIFrame();
+ComfyUIFrame callFrame = ComfyUIFrame();
+ComfyUIFrame messagesFrame = ComfyUIFrame();
+ComfyUIFrame gamesFrame = ComfyUIFrame();
 
-ComfyUIText llamadaText = ComfyUIText(10, 10, "Llamada");
+ComfyUIText callText = ComfyUIText(10, 10, "Llamada");
 ComfyUIText mensajesText = ComfyUIText(10, 10, "Mensajes");
-ComfyUIText juegosText = ComfyUIText(10, 10, "Juegos");
+ComfyUIText gamesText = ComfyUIText(10, 10, "Juegos");
 
 // Buttons
 PushButton button1(13);
@@ -72,12 +110,15 @@ VibrationMotor vibrationMotor(4);
 // Buzzer
 Buzzer buzzer(5);
 
+// Commands
+Commands serialCommands(&Serial);
+Commands bluetoothCommands(&bluetoothSerial);
+
 // Loops
 unsigned long dt = 0;
 
-// TODO: Rename task to backgroundLoop
-TaskHandle_t smallDisplayTask;
-void updateSmallDisplay(void *params) {
+TaskHandle_t backgroundLoopTask;
+void backgroundLoop(void *params) {
     while (true) {
         smallDisplay.clearDisplay();
         smallDisplay.setTextColor(SSD1306_WHITE);
@@ -92,48 +133,62 @@ void updateSmallDisplay(void *params) {
 
         leds.service();
         
-        vTaskDelay(100 / portTICK_PERIOD_MS);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
 
 void setup() {
+    // * Begin console Serial
     Serial.begin(115200);
+
+    // * Begin bluetooth Serial
+    bluetoothSerial.begin(DEVICE_NAME);
+
+    // * Begin Preferences
+    preferences.begin(PRODUCT_NAME.c_str(), false);
+
+    // * Begin GPS Serial
     gpsSerial.begin(9600, SERIAL_8N1, GPS_RX, GPS_TX);
+
+    // * Begin LEDs
     leds.begin();
     leds.setBrightness(LED_BRIGHTNESS);
     leds.setSpeed(5000);
     leds.setMode(FX_MODE_RAINBOW_CYCLE);
     leds.start();
 
+    // * Begin I2C for displays
     Wire.begin();
     smallDisplayWire.begin(SMALL_DISPLAY_SDA, SMALL_DISPLAY_SCL);
 
+    // * Begin Displays
     smallDisplay.begin(SSD1306_SWITCHCAPVCC, SMALL_DISPLAY_ADDRESS);
     bigDisplay.begin(SSD1306_SWITCHCAPVCC, BIG_DISPLAY_ADDRESS);
 
-    buttonListUI.addChild(&button1UI);
-    buttonListUI.addChild(&button2UI);
-    buttonListUI.addChild(&button3UI);
+    // * UI
+    buttonList.addChild(&callButton);
+    buttonList.addChild(&messagesButton);
+    buttonList.addChild(&gamesButton);
 
-    tabsUI.setTabsList(&buttonListUI);
+    tabsUI.setTabsList(&buttonList);
 
-    llamadaFrame.addChild(&llamadaText);
-    mensajesFrame.addChild(&mensajesText);
-    juegosFrame.addChild(&juegosText);
+    callFrame.addChild(&callText);
+    messagesFrame.addChild(&mensajesText);
+    gamesFrame.addChild(&gamesText);
     
-    tabsUI.addTab("Llamada", &llamadaFrame);
-    tabsUI.addTab("Mensajes", &mensajesFrame);
-    tabsUI.addTab("Juegos", &juegosFrame);
+    tabsUI.addTab("Llamada", &callFrame);
+    tabsUI.addTab("Mensajes", &messagesFrame);
+    tabsUI.addTab("Juegos", &gamesFrame);
 
-    button1UI.setPressedCallback([]() {
+    callButton.setPressedCallback([]() {
         tabsUI.setTab("Llamada");
     });
 
-    button2UI.setPressedCallback([]() {
+    messagesButton.setPressedCallback([]() {
         tabsUI.setTab("Mensajes");
     });
 
-    button3UI.setPressedCallback([]() {
+    gamesButton.setPressedCallback([]() {
         tabsUI.setTab("Juegos");
     });
 
@@ -146,36 +201,41 @@ void setup() {
     bigUI.addElement(&tabsUI);
 
     button2.setOnRising([]() {
-        buttonListUI.selectPrevious();
+        buttonList.selectPrevious();
         vibrationMotor.vibrate(100);
         buzzer.beep(1500, 100);
     });
 
     button3.setOnRising([]() {
-        buttonListUI.selectNext();
+        buttonList.selectNext();
         vibrationMotor.vibrate(100);
         buzzer.beep(1500, 100);
     });
 
     button4.setOnRising([]() {
-        buttonListUI.getSelectedButton()->setPressed(true);
+        buttonList.getSelectedButton()->setPressed(true);
         vibrationMotor.vibrate(250);
         buzzer.beep(200, 250);
     });
 
     button4.setOnFalling([]() {
-        buttonListUI.getSelectedButton()->setPressed(false);
+        buttonList.getSelectedButton()->setPressed(false);
+    });
+
+    bluetoothCommands.addCommand("which", [](Stream *serial, LinkedList<String> args) {
+        Serial.println("which");
+        serial->println("BComfy 0.0.1");
     });
 
     vibrationMotor.vibrate(1000);
 
     xTaskCreate(
-        updateSmallDisplay,
-        "updateSmallDisplay",
+        backgroundLoop,
+        "backgroundLoop",
         4096,
         NULL,
         1,
-        &smallDisplayTask
+        &backgroundLoopTask
     );
 }
 
@@ -186,7 +246,6 @@ uint changePeriod = 500;
 void loop() {
     unsigned long currentTime = millis();
     dt = currentTime - lastTime;
-    // Serial.println("dt: " + String(dt));
 
     bigUI.update();
 
@@ -198,6 +257,9 @@ void loop() {
     vibrationMotor.service();
 
     buzzer.service();
+
+    if (bluetoothSerial.available()) bluetoothCommands.readSerial();
+    if (Serial.available()) serialCommands.readSerial();
 
     lastTime = currentTime;
 }

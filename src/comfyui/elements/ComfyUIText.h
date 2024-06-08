@@ -17,10 +17,11 @@ class ComfyUIText : public ComfyUIElement {
         int textSize;
         int color;
         int paddingX;
+        bool wrap;
         comfy_ui_align align;
 
     public:
-        ComfyUIText(int x, int y, String text, int textSize = 1, comfy_ui_align align = comfy_ui_align::LEFT, int paddingX = 0, int color = SSD1306_WHITE) {
+        ComfyUIText(int x, int y, String text, int textSize = 1, bool wrap = true, comfy_ui_align align = comfy_ui_align::LEFT, int paddingX = 0, int color = SSD1306_WHITE) {
             this->x = x + paddingX;
             this->originalX = x;
             this->y = y;
@@ -28,12 +29,14 @@ class ComfyUIText : public ComfyUIElement {
             this->textSize = textSize;
             this->align = align;
             this->paddingX = paddingX;
+            this->wrap = wrap;
             this->color = color;
         }
 
         void draw(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
             display->setTextSize(this->textSize);
             display->setTextColor(this->color);
+            display->setTextWrap(this->wrap);
             display->setCursor(this->x, this->y);
             display->println(this->text);
         }

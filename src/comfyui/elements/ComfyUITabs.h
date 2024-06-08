@@ -28,6 +28,7 @@ class ComfyUITabs : public ComfyUIFrame {
             this->tabs.add(tab);
         }
 
+        // TODO: Abstract button list methods, create in-class
         void setTabsList(ComfyUIButtonList* tabsList) {
             this->tabsList = tabsList;
         }
