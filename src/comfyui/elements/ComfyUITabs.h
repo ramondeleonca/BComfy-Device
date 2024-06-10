@@ -19,6 +19,8 @@ class ComfyUITabs : public ComfyUIFrame {
         ComfyUIButtonList* tabsList;
         LinkedList<comfyui_tab> tabs;
         String currentTab = "";
+        void (*function);
+        String lastTab = "";
 
     public:
         ComfyUITabs(int x = 0, int y = 0, int width = 128, int height = 64) : ComfyUIFrame(x, y, width, height) {}
@@ -34,8 +36,14 @@ class ComfyUITabs : public ComfyUIFrame {
         }
 
         void setTab(String name = "") {
+            if (this->currentTab != name) this->function();
             this->currentTab = name;
         }
+
+        void setOnTab(void (*function)) {
+            this->function = function;
+        }
+
 
         void update(Adafruit_SSD1306* display, ComfyUIElement* parent = NULL) {
             
