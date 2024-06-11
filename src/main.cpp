@@ -4,7 +4,6 @@
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
 #include <WS2812FX.h>
-#include <BluetoothSerial.h>
 #include "hal/PushButton.cpp"
 #include "hal/VibrationMotor.cpp"
 #include "hal/Potentiometer.cpp"
@@ -17,6 +16,10 @@
 #include <Preferences.h>
 #include "lib/Commands.cpp"
 #include <ArduinoJson.h>
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+#include "./ble.h"
 
 // Device config
 const String PRODUCT_NAME = "BComfy";
@@ -40,9 +43,6 @@ const int LED_PIN = 2;
 const int LED_COUNT = 10;
 int LED_BRIGHTNESS = 100;
 WS2812FX leds = WS2812FX(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
-
-// Bluetooth Config
-BluetoothSerial bluetoothSerial;
 
 // GPS Config
 const int GPS_RX = 16;
@@ -112,7 +112,6 @@ Buzzer buzzer(5);
 
 // Commands
 Commands serialCommands(&Serial);
-Commands bluetoothCommands(&bluetoothSerial);
 
 // Loops
 unsigned long dt = 0;
@@ -141,8 +140,32 @@ void setup() {
     // * Begin console Serial
     Serial.begin(115200);
 
-    // * Begin bluetooth Serial
-    bluetoothSerial.begin(DEVICE_NAME);
+    // * Begin BLE
+    BLEDevice::init(DEVICE_NAME.c_str());
+    BLEServer *pServer = BLEDevice::createServer();
+    BLEService *pUserService = pServer->createService(BLE_USER_SERVICE_UUID);
+    BLECharacteristic *pUserNameCharacteristic = pUserService->createCharacteristic(
+        BLE_USER_NAME_CHARACTERISTIC_UUID,
+        BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY
+    );
+    pUserNameCharacteristic->setValue("USER_NAME");
+    BLECharacteristic *pUserPhoneCharacteristic = pUserService->createCharacteristic(
+        BLE_USER_PHONE_CHARACTERISTIC_UUID,
+        BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY
+    );
+    pUserPhoneCharacteristic->setValue("USER_PHONE");
+    BLECharacteristic *pUserConditionCharacteristic = pUserService->createCharacteristic(
+        BLE_USER_CONDITION_CHARACTERISTIC_UUID,
+        BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY
+    );
+    pUserConditionCharacteristic->setValue("USER_CONDITION");
+    pUserService->start();
+    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(BLE_USER_SERVICE_UUID);
+    pAdvertising->setScanResponse(true);
+    pAdvertising->setMinPreferred(0x06); // functions that help with iPhone connections issue
+    pAdvertising->setMinPreferred(0x12);
+    BLEDevice::startAdvertising();
 
     // * Begin Preferences
     preferences.begin(PRODUCT_NAME.c_str(), false);
@@ -222,9 +245,8 @@ void setup() {
         buttonList.getSelectedButton()->setPressed(false);
     });
 
-    bluetoothCommands.addCommand("which", [](Stream *serial, LinkedList<String> args) {
-        Serial.println("which");
-        serial->println("BComfy 0.0.1");
+    serialCommands.addCommand("get_mac", [](Stream *serial, LinkedList<String> args) {
+        serial->println(WiFi.macAddress());
     });
 
     vibrationMotor.vibrate(1000);
@@ -256,9 +278,8 @@ void loop() {
 
     vibrationMotor.service();
 
-    buzzer.service();
+    buzzer.service(); 
 
-    if (bluetoothSerial.available()) bluetoothCommands.readSerial();
     if (Serial.available()) serialCommands.readSerial();
 
     lastTime = currentTime;

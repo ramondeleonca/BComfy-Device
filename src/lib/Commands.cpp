@@ -41,8 +41,10 @@ class Commands {
             LinkedList<String> args;
             int nextSepIndex;
             while (sepIndex != -1) {
-                if (input.charAt(sepIndex + 1) == '"') nextSepIndex = input.indexOf('"', sepIndex + 2);
-                else nextSepIndex = input.indexOf(sep, sepIndex + 1);
+                if (input.charAt(sepIndex + 1) == '"') {
+                    nextSepIndex = input.indexOf('"', sepIndex + 2);
+                    nextSepIndex = input.indexOf(sep, nextSepIndex + 1);
+                } else nextSepIndex = input.indexOf(sep, sepIndex + 1);
 
                 if (nextSepIndex == -1) {
                     args.add(input.substring(sepIndex + 1));
@@ -57,6 +59,13 @@ class Commands {
             Serial.println("Command: " + command);
             for (int i = 0; i < args.size(); i++) {
                 Serial.println("Arg " + String(i) + ": " + args.get(i));
+            }
+
+            for (int i = 0; i < commandList.size(); i++) {
+                if (commandList.get(i).name == command) {
+                    commandList.get(i).function(serial, args);
+                    return;
+                }
             }
         }
 };
