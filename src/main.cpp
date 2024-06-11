@@ -259,6 +259,9 @@ void setup() {
         1,
         &backgroundLoopTask
     );
+
+    OpenAI_StringResponse response = chat.message(message);
+    Serial.println(response.getAt(0));
 }
 
 //! REMEMBER DO NOT USE DELAY IN LOOP
