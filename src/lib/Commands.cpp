@@ -4,6 +4,8 @@
 #include <Arduino.h>
 #include <LinkedList.h>
 
+// #define DEBUG
+
 struct Command {
     String name;
     void (*function)(Stream* serial, LinkedList<String> args);
@@ -27,7 +29,9 @@ class Commands {
             Command command;
             command.name = name;
             command.function = function;
+            #ifdef DEBUG
             Serial.println("Added command: " + name);
+            #endif
             commandList.add(command);
         }
 
@@ -55,11 +59,11 @@ class Commands {
                 sepIndex = nextSepIndex;
             }
 
+            #ifdef DEBUG
             Serial.println("Received: " + input);
             Serial.println("Command: " + command);
-            for (int i = 0; i < args.size(); i++) {
-                Serial.println("Arg " + String(i) + ": " + args.get(i));
-            }
+            for (int i = 0; i < args.size(); i++) Serial.println("Arg " + String(i) + ": " + args.get(i));
+            #endif
 
             for (int i = 0; i < commandList.size(); i++) {
                 if (commandList.get(i).name == command) {

@@ -1,25 +1,18 @@
 #include <Arduino.h>
-#include <HardwareSerial.h>
-#include <TinyGPS++.h>
+#include <WiFi.h>
+#include <OpenAI.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
-#include <WS2812FX.h>
+#include <Preferences.h>
+#include <BluetoothSerial.h>
+#include "aikey.h"
 #include "hal/PushButton.cpp"
 #include "hal/VibrationMotor.cpp"
 #include "hal/Potentiometer.cpp"
 #include "hal/Buzzer.cpp"
-#include "comfyui/ComfyUI2.cpp"
-#include "comfyui/icons.h"
-#include "comfyui/elements/ComfyUITabs.h"
-#include "aikey.h"
-#include <WiFi.h>
-#include <Preferences.h>
 #include "lib/Commands.cpp"
-#include <ArduinoJson.h>
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEServer.h>
-#include "./ble.h"
+#include "comfyui/icons.h"
+#include "lib/Utils.h"
 
 // Device config
 const String PRODUCT_NAME = "BComfy";
@@ -37,18 +30,8 @@ const int OPENAI_CHAT_TOKENS = 200;
 const float OPENAI_CHAT_TEMPERATURE = 0.7;
 const float OPENAI_CHAT_PRESENCE_PENALTY = 0.5;
 const float OPENAI_CHAT_FREQUENCY_PENALTY = 0.5;
-
-// LED Config
-const int LED_PIN = 2;
-const int LED_COUNT = 10;
-int LED_BRIGHTNESS = 100;
-WS2812FX leds = WS2812FX(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
-
-// GPS Config
-const int GPS_RX = 16;
-const int GPS_TX = 17;
-HardwareSerial gpsSerial(1);
-TinyGPSPlus gps;
+OpenAI openai(OPENAI_API_KEY.c_str());
+OpenAI_ChatCompletion chat(openai);
 
 // Displays config
 // * BIG DISPLAY
@@ -66,40 +49,32 @@ const int SMALL_DISPLAY_SCL = 19;
 TwoWire smallDisplayWire(1);
 Adafruit_SSD1306 smallDisplay(SMALL_DISPLAY_WIDTH, SMALL_DISPLAY_HEIGHT, &smallDisplayWire, -1);
 
+// Contexts
+const String screens[] = {"Llamada", "Mensajes", "Actualizar"};
+const int screensSize = sizeof(screens) / sizeof(screens[0]);
+int currentScreen = 0;
+
+enum context_t {
+    NONE,
+    CALL_CONFIRM
+};
+context_t context = context_t::NONE;
+
 // Preferences
 Preferences preferences;
 
-// Context
-enum context_t {
-    CALL,
-    MESSAGES,
-    GAMES
-};
+// Bluetooth Serial
+BluetoothSerial SerialBT;
 
-// ComfyUI
-ComfyUI bigUI(&bigDisplay);
-
-ComfyUIButton callButton = ComfyUIButton(10, 10, "Llamada", volup, volup_width, volup_height);
-ComfyUIButton messagesButton = ComfyUIButton(10, 30, "Mensajes", sdcardmounted, sdcardmounted_width, sdcardmounted_height);
-ComfyUIButton gamesButton = ComfyUIButton(10, 50, "Juegos", gamemode, gamemode_width, gamemode_height);
-
-ComfyUIButtonList buttonList = ComfyUIButtonList();
-
-ComfyUITabs tabsUI = ComfyUITabs();
-
-ComfyUIFrame callFrame = ComfyUIFrame();
-ComfyUIFrame messagesFrame = ComfyUIFrame();
-ComfyUIFrame gamesFrame = ComfyUIFrame();
-
-ComfyUIText callText = ComfyUIText(10, 10, "Llamada");
-ComfyUIText mensajesText = ComfyUIText(10, 10, "Mensajes");
-ComfyUIText gamesText = ComfyUIText(10, 10, "Juegos");
+// Commands
+Commands serialCommands(&Serial);
+Commands bluetoothCommands(&SerialBT);
 
 // Buttons
-PushButton button1(13);
-PushButton button2(12);
-PushButton button3(14);
-PushButton button4(27);
+PushButton backButton(13);
+PushButton upButton(12);
+PushButton dnButton(14);
+PushButton okButton(27);
 
 // Potentiometer
 Potentiometer potentiometer(15);
@@ -110,180 +85,125 @@ VibrationMotor vibrationMotor(4);
 // Buzzer
 Buzzer buzzer(5);
 
-// Commands
-Commands serialCommands(&Serial);
+// Variables loaded in from preferences
+String emergencyNumber;
 
-// Loops
-unsigned long dt = 0;
-
-TaskHandle_t backgroundLoopTask;
-void backgroundLoop(void *params) {
-    while (true) {
-        smallDisplay.clearDisplay();
-        smallDisplay.setTextColor(SSD1306_WHITE);
-        smallDisplay.setTextSize(2);
-        smallDisplay.setCursor(0, 0);
-        smallDisplay.print("FPS: ");
-        smallDisplay.println(1000 / (int)dt);
-        smallDisplay.print("MEM: ");
-        smallDisplay.print((ESP.getFreeHeap() * 100) / ESP.getHeapSize());
-        smallDisplay.println("%");
-        smallDisplay.display();
-
-        leds.service();
-        
-        vTaskDelay(10 / portTICK_PERIOD_MS);
-    }
-}
-
-void setup() {
-    // * Begin console Serial
-    Serial.begin(115200);
-
-    // * Begin BLE
-    BLEDevice::init(DEVICE_NAME.c_str());
-    BLEServer *pServer = BLEDevice::createServer();
-    BLEService *pUserService = pServer->createService(BLE_USER_SERVICE_UUID);
-    BLECharacteristic *pUserNameCharacteristic = pUserService->createCharacteristic(
-        BLE_USER_NAME_CHARACTERISTIC_UUID,
-        BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY
-    );
-    pUserNameCharacteristic->setValue("USER_NAME");
-    BLECharacteristic *pUserPhoneCharacteristic = pUserService->createCharacteristic(
-        BLE_USER_PHONE_CHARACTERISTIC_UUID,
-        BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY
-    );
-    pUserPhoneCharacteristic->setValue("USER_PHONE");
-    BLECharacteristic *pUserConditionCharacteristic = pUserService->createCharacteristic(
-        BLE_USER_CONDITION_CHARACTERISTIC_UUID,
-        BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY
-    );
-    pUserConditionCharacteristic->setValue("USER_CONDITION");
-    pUserService->start();
-    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(BLE_USER_SERVICE_UUID);
-    pAdvertising->setScanResponse(true);
-    pAdvertising->setMinPreferred(0x06); // functions that help with iPhone connections issue
-    pAdvertising->setMinPreferred(0x12);
-    BLEDevice::startAdvertising();
-
-    // * Begin Preferences
-    preferences.begin(PRODUCT_NAME.c_str(), false);
-
-    // * Begin GPS Serial
-    gpsSerial.begin(9600, SERIAL_8N1, GPS_RX, GPS_TX);
-
-    // * Begin LEDs
-    leds.begin();
-    leds.setBrightness(LED_BRIGHTNESS);
-    leds.setSpeed(5000);
-    leds.setMode(FX_MODE_RAINBOW_CYCLE);
-    leds.start();
-
-    // * Begin I2C for displays
-    Wire.begin();
-    smallDisplayWire.begin(SMALL_DISPLAY_SDA, SMALL_DISPLAY_SCL);
-
-    // * Begin Displays
-    smallDisplay.begin(SSD1306_SWITCHCAPVCC, SMALL_DISPLAY_ADDRESS);
-    bigDisplay.begin(SSD1306_SWITCHCAPVCC, BIG_DISPLAY_ADDRESS);
-
-    // * UI
-    buttonList.addChild(&callButton);
-    buttonList.addChild(&messagesButton);
-    buttonList.addChild(&gamesButton);
-
-    tabsUI.setTabsList(&buttonList);
-
-    callFrame.addChild(&callText);
-    messagesFrame.addChild(&mensajesText);
-    gamesFrame.addChild(&gamesText);
-    
-    tabsUI.addTab("Llamada", &callFrame);
-    tabsUI.addTab("Mensajes", &messagesFrame);
-    tabsUI.addTab("Juegos", &gamesFrame);
-
-    callButton.setPressedCallback([]() {
-        tabsUI.setTab("Llamada");
-    });
-
-    messagesButton.setPressedCallback([]() {
-        tabsUI.setTab("Mensajes");
-    });
-
-    gamesButton.setPressedCallback([]() {
-        tabsUI.setTab("Juegos");
-    });
-
-    button1.setOnRising([]() {
-        tabsUI.setTab();
-        vibrationMotor.vibrate(100);
-        buzzer.beep(1500, 100);
-    });
-
-    bigUI.addElement(&tabsUI);
-
-    button2.setOnRising([]() {
-        buttonList.selectPrevious();
-        vibrationMotor.vibrate(100);
-        buzzer.beep(1500, 100);
-    });
-
-    button3.setOnRising([]() {
-        buttonList.selectNext();
-        vibrationMotor.vibrate(100);
-        buzzer.beep(1500, 100);
-    });
-
-    button4.setOnRising([]() {
-        buttonList.getSelectedButton()->setPressed(true);
-        vibrationMotor.vibrate(250);
-        buzzer.beep(200, 250);
-    });
-
-    button4.setOnFalling([]() {
-        buttonList.getSelectedButton()->setPressed(false);
-    });
-
-    serialCommands.addCommand("get_mac", [](Stream *serial, LinkedList<String> args) {
+void registerCommands(Commands commands) {
+    commands.addCommand("get_mac", [](Stream *serial, LinkedList<String> args) {
         serial->println(WiFi.macAddress());
     });
 
-    vibrationMotor.vibrate(1000);
+    commands.addCommand("get_version", [](Stream *serial, LinkedList<String> args) {
+        serial->println(PRODUCT_VERSION);
+    });
 
-    xTaskCreate(
-        backgroundLoop,
-        "backgroundLoop",
-        4096,
-        NULL,
-        1,
-        &backgroundLoopTask
-    );
-
-    OpenAI_StringResponse response = chat.message(message);
-    Serial.println(response.getAt(0));
+    commands.addCommand("echo", [](Stream *serial, LinkedList<String> args) {
+        serial->println(args.get(0));
+    });
 }
 
-//! REMEMBER DO NOT USE DELAY IN LOOP
-unsigned long lastTime = 0;
-unsigned long lastChange = 0;
-uint changePeriod = 500;
+void setup() {
+    // Init serial
+    Serial.begin(115200);
+
+    // Init preferences
+    preferences.begin(PRODUCT_NAME.c_str(), false);
+
+    // Load persistent variables
+    preferences.getString("emergencyNumber", "8446012963");
+
+    // Init Bluetooth
+    SerialBT.begin(DEVICE_NAME.c_str());
+
+    // Begin I2C for displays
+    Wire.begin();
+    smallDisplayWire.begin(SMALL_DISPLAY_SDA, SMALL_DISPLAY_SCL);
+
+    // Begin Displays
+    smallDisplay.begin(SSD1306_SWITCHCAPVCC, SMALL_DISPLAY_ADDRESS);
+    bigDisplay.begin(SSD1306_SWITCHCAPVCC, BIG_DISPLAY_ADDRESS);
+
+    smallDisplay.display();
+    bigDisplay.display();
+
+    // Register commands
+    registerCommands(serialCommands);
+    registerCommands(bluetoothCommands);
+
+    // Bind buttons
+    upButton.setOnRising([]() {
+        currentScreen = Utils::Array::getRealIndex(screens, screensSize, currentScreen - 1);
+    });
+
+    dnButton.setOnRising([]() {
+        currentScreen = Utils::Array::getRealIndex(screens, screensSize, currentScreen + 1);
+    });
+
+    // Final bootup
+    vibrationMotor.vibrate(500);
+}
+
 void loop() {
-    unsigned long currentTime = millis();
-    dt = currentTime - lastTime;
-
-    bigUI.update();
-
-    button1.service();
-    button2.service();
-    button3.service();
-    button4.service();
-
+    // HAL services
+    backButton.service();
+    upButton.service();
+    dnButton.service();
+    okButton.service();
+    potentiometer.service();
     vibrationMotor.service();
+    buzzer.service();
 
-    buzzer.service(); 
-
+    // Serial commands
     if (Serial.available()) serialCommands.readSerial();
+    if (SerialBT.available()) bluetoothCommands.readSerial();
 
-    lastTime = currentTime;
+    // Displays
+    // * BIG DISPLAY
+    bigDisplay.clearDisplay();
+    bigDisplay.setTextSize(1);
+    bigDisplay.setTextColor(SSD1306_WHITE);
+    bigDisplay.setCursor(0, 0);
+    bigDisplay.println(screens[currentScreen]);
+    bigDisplay.drawLine(0, 10, BIG_DISPLAY_WIDTH, 10, SSD1306_WHITE);
+
+    bigDisplay.drawBitmap(BIG_DISPLAY_WIDTH - bluetooth_width - 2, 1, bluetooth, bluetooth_width, bluetooth_height, SSD1306_WHITE);
+    bigDisplay.drawBitmap(BIG_DISPLAY_WIDTH - pin_star_width - 2 - bluetooth_width - 2, 1, pin_star, pin_star_width, pin_star_height, SSD1306_WHITE);
+    bigDisplay.drawBitmap(BIG_DISPLAY_WIDTH - attention_width - 2 - pin_star_width - 2 - bluetooth_width - 2, 1, attention, attention_width, attention_height, SSD1306_WHITE);
+
+    switch(currentScreen) {
+        case 0: {
+            String callText = context == context_t::CALL_CONFIRM ? "" : "Llamar ->";
+            bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
+            int16_t _;
+            uint16_t w, h;
+            bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
+            bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2), BIG_DISPLAY_HEIGHT - 25);
+            bigDisplay.println(callText);
+            break;
+        }
+    }
+
+    bigDisplay.display();
+
+    // * SMALL DISPLAY
+    int previousScreen = Utils::Array::getRealIndex(screens, screensSize, currentScreen - 1);
+    int nextScreen = Utils::Array::getRealIndex(screens, screensSize, currentScreen + 1);
+    
+    smallDisplay.clearDisplay();
+    smallDisplay.setTextSize(1);
+    smallDisplay.setTextColor(SSD1306_WHITE);
+    smallDisplay.drawBitmap(2, 10, arrow_down, arrow_down_width, arrow_down_height, SSD1306_WHITE);
+    smallDisplay.setCursor(2 + arrow_left_width + 2, 10);
+    smallDisplay.println(screens[previousScreen]);
+
+    int16_t _;
+    uint16_t w, h;
+    smallDisplay.getTextBounds(screens[nextScreen], 0, 0, &_, &_, &w, &h);
+    smallDisplay.drawBitmap(SMALL_DISPLAY_WIDTH - 2 - arrow_up_width, 2, arrow_up, arrow_up_width, arrow_up_height, SSD1306_WHITE);
+    smallDisplay.setCursor(SMALL_DISPLAY_WIDTH - 2 - arrow_up_width - w - 2, 2);
+    smallDisplay.println(screens[nextScreen]);
+
+    smallDisplay.display();
+
+    // currentScreen = potentiometer.getValue() / 512;
 }

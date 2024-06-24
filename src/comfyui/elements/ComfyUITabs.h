@@ -19,7 +19,7 @@ class ComfyUITabs : public ComfyUIFrame {
         ComfyUIButtonList* tabsList;
         LinkedList<comfyui_tab> tabs;
         String currentTab = "";
-        void (*function);
+        void (*function)();
         String lastTab = "";
 
     public:
@@ -36,11 +36,11 @@ class ComfyUITabs : public ComfyUIFrame {
         }
 
         void setTab(String name = "") {
-            if (this->currentTab != name) this->function();
+            if (this->currentTab != name && this->function) this->function();
             this->currentTab = name;
         }
 
-        void setOnTab(void (*function)) {
+        void setOnTab(void (*function)()) {
             this->function = function;
         }
 

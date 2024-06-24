@@ -95,6 +95,10 @@ class ComfyUIButton : public ComfyUIElement {
             this->pressed = pressed;
         }
 
+        bool getPressed() {
+            return this->pressed;
+        }
+
         bool isSelected() {
             return this->selected;
         }

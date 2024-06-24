@@ -69,6 +69,10 @@ class ComfyUIText : public ComfyUIElement {
         int getY() {
             return this->y;
         }
+
+        void setText(String text) {
+            this->text = text;
+        }
 };
 
 #endif

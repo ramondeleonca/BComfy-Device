@@ -6,28 +6,48 @@
 class Potentiometer {
     private:
         int pin;
-        int value;
         int rawValue;
-        int lastValue;
-        int min;
-        int max;
+        int stepSize;
+        int sampleStart = -2;
+        int sampleTime;
+        int lastStep;
+        void (*onStep)(int);
 
     public:
-        Potentiometer(int pin, int min = 0, int max = 4096) {
+        Potentiometer(int pin, int stepSize = 360, int sampleTime = 2000) {
             this->pin = pin;
-            this->value = 0;
             this->rawValue = 0;
-            this->lastValue = 0;
-            this->min = min;
-            this->max = max;
+            this->stepSize = stepSize;
+            this->sampleTime = sampleTime;
             pinMode(pin, INPUT);
         };
 
+        void service() {
+            unsigned long currentTime = millis();
+            int currentValue = analogRead(this->pin) & 0b1111111111000000;
+            if (this->sampleStart == -2) {
+                this->sampleStart = currentValue;
+            } else if (this->sampleStart == -1) {
+                this->sampleStart = currentValue;
+            } else if (currentTime - this->sampleTime > this->sampleStart) {
+                this->rawValue = (this->rawValue + currentValue) / 2;
+                this->sampleStart = -1;
+            }
+
+            if (!this->lastStep) this->lastStep = this->rawValue;
+            if (abs(this->rawValue - this->lastStep) > this->stepSize) {
+                if (this->onStep) this->onStep(this->rawValue - this->lastStep);
+                this->lastStep = this->rawValue;
+            }
+        }
+
         int getValue() {
-            this->rawValue = analogRead(this->pin);
-            this->value = map(this->rawValue, 0, 4096, this->min, this->max);
-            return this->value;
-        };
+            return this->rawValue;
+        }
+
+        void setOnStep(void (*onStep)(int)) {
+            this->onStep = onStep;
+        }
 };
 
 #endif
