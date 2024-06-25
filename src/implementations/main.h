@@ -9,13 +9,15 @@
 #include <Preferences.h>
 #include <BluetoothSerial.h>
 #include "aikey.h"
+#include "lib/SIM800L.h"
 #include "hal/PushButton.cpp"
 #include "hal/VibrationMotor.cpp"
 #include "hal/Potentiometer.cpp"
 #include "hal/Buzzer.cpp"
-#include "lib/Commands.cpp"
+#include "lib/Commands.h"
 #include "comfyui/icons.h"
 #include "lib/Utils.h"
+#include "data.h"
 
 // Device config
 const String PRODUCT_NAME = "BComfy";
@@ -53,7 +55,7 @@ TwoWire smallDisplayWire(1);
 Adafruit_SSD1306 smallDisplay(SMALL_DISPLAY_WIDTH, SMALL_DISPLAY_HEIGHT, &smallDisplayWire, -1);
 
 // Contexts
-const String screens[] = {"Llamada", "Mensajes", "Actualizar"};
+const String screens[] = {"Llamada", "Mensajes"};
 const int screensSize = sizeof(screens) / sizeof(screens[0]);
 int currentScreen = 0;
 
@@ -85,6 +87,12 @@ VibrationMotor vibrationMotor(4);
 
 // Buzzer
 Buzzer buzzer(5);
+
+// SimSerial
+const int SIM_RX = 16;
+const int SIM_TX = 17;
+HardwareSerial SIM800lSerial(2);
+SIM800l sim800l(&SIM800lSerial);
 
 // Variables loaded in from preferences
 String emergencyNumber;
@@ -118,10 +126,15 @@ void setup() {
     preferences.begin(PRODUCT_NAME.c_str(), false);
 
     // Load persistent variables
-    emergencyNumber = preferences.getString("emergencyNumber");
+    // emergencyNumber = preferences.getString("emergencyNumber");
+    emergencyNumber = TEST_NUMBER;
 
     // Init Bluetooth
     SerialBT.begin(DEVICE_NAME.c_str());
+
+    // Begin SIM800L
+    SIM800lSerial.begin(9600, SERIAL_8N1, SIM_RX, SIM_TX);
+    sim800l.begin();
 
     // Begin I2C for displays
     Wire.begin();
@@ -187,6 +200,8 @@ class BigDisplayUI {
 
                         // Phone icon
                         bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_check_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_check_big_height / 2) - 5, phone_check_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
+
+                        if (!calling) sim800l.call(emergencyNumber);
                     } else {
                         if (buttonStart > -1) {
                             if (millis() - buttonStart < buttonDuration) {
@@ -224,8 +239,13 @@ class BigDisplayUI {
                             bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
 
                             // Add listener for OK button
-                            if (okButton.isPressed()) buttonStart = millis();
-                            else buttonStart = -1;
+                            okButton.setOnRising([]() {
+                                buttonStart = millis();
+                            });
+
+                            okButton.setOnFalling([]() {
+                                if (millis() - buttonStart < buttonDuration) buttonStart = -1;
+                            });
                         }
                     }
 
@@ -263,9 +283,21 @@ class SmallDisplayUI {
             smallDisplay.println(screens[nextScreen]);
         }
 
+        static void renderBottomBar() {
+            String time = "Time";
+            int16_t _;
+            uint16_t w, h;
+            smallDisplay.getTextBounds(time, 0, 0, &_, &_, &w, &h);
+            smallDisplay.setCursor(SMALL_DISPLAY_WIDTH - 2 - arrow_up_width - w - 2, 2);
+            smallDisplay.println(time);
+
+            smallDisplay.drawLine(0, SMALL_DISPLAY_HEIGHT - 10, SMALL_DISPLAY_WIDTH, SMALL_DISPLAY_HEIGHT - 10, SSD1306_WHITE);
+        }
+
         static void render() {
             smallDisplay.clearDisplay();
             renderScreenList();
+            renderBottomBar();
             smallDisplay.display();
         }
 };

@@ -32,8 +32,13 @@ void loop() {
     SIM800l.println("AT+CLVL=100"); // Adjust the volume level as needed
     delay(1000);
     SIM800l.println("ATD" + TEST_NUMBER + ";");
+    Serial.println("ATD" + TEST_NUMBER + ";");
     Serial.println("Llamando...");
-
+    if(SIM800l.available()){
+      char c = SIM800l.read();
+      Serial.print(c);
+      Serial.println();
+    }
     delay(5000);
     SIM800l.println("AT+CMIC=0, 6");
     delay(1000);
