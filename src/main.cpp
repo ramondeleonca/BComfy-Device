@@ -54,11 +54,9 @@ const String screens[] = {"Llamada", "Mensajes", "Actualizar"};
 const int screensSize = sizeof(screens) / sizeof(screens[0]);
 int currentScreen = 0;
 
-enum context_t {
-    NONE,
-    CALL_CONFIRM
+struct state {
+    bool calling = false;
 };
-context_t context = context_t::NONE;
 
 // Preferences
 Preferences preferences;
@@ -110,7 +108,7 @@ void setup() {
     preferences.begin(PRODUCT_NAME.c_str(), false);
 
     // Load persistent variables
-    preferences.getString("emergencyNumber", "8446012963");
+    emergencyNumber = preferences.getString("emergencyNumber");
 
     // Init Bluetooth
     SerialBT.begin(DEVICE_NAME.c_str());
@@ -143,6 +141,10 @@ void setup() {
     vibrationMotor.vibrate(500);
 }
 
+// Not pressed: -1
+int buttonStart = -1;
+int buttonDuration = 2000;
+bool calling = false;
 void loop() {
     // HAL services
     backButton.service();
@@ -172,13 +174,59 @@ void loop() {
 
     switch(currentScreen) {
         case 0: {
-            String callText = context == context_t::CALL_CONFIRM ? "" : "Llamar ->";
-            bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
-            int16_t _;
-            uint16_t w, h;
-            bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
-            bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2), BIG_DISPLAY_HEIGHT - 25);
-            bigDisplay.println(callText);
+            if (calling) {
+                // Text
+                String callText = "Llamando...";
+                int16_t _;
+                uint16_t w, h;
+                bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
+                bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2), BIG_DISPLAY_HEIGHT - 25);
+                bigDisplay.println(callText);
+
+                // Phone icon
+                bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_check_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_check_big_height / 2) - 5, phone_check_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
+            } else {
+                if (buttonStart > -1) {
+                    if (millis() - buttonStart < buttonDuration) {
+                        // Text
+                        String callText = "Manten presionado...";
+                        int16_t _;
+                        uint16_t w, h;
+                        bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
+                        bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2), BIG_DISPLAY_HEIGHT - 25);
+                        bigDisplay.println(callText);
+
+                        // Draw progress bar
+                        bigDisplay.drawRect(2, BIG_DISPLAY_HEIGHT - 10, BIG_DISPLAY_WIDTH - 4, 8, SSD1306_WHITE);
+                        bigDisplay.fillRect(2, BIG_DISPLAY_HEIGHT - 10, map(millis() - buttonStart, 0, buttonDuration, 0, BIG_DISPLAY_WIDTH - 4), 8, SSD1306_WHITE);
+        
+                        // Phone icon
+                        bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
+                    } else {
+                        // Call
+                        calling = true;
+                    }
+                } else {
+                    // Text
+                    String callText = "Llamar";
+                    int16_t _;
+                    uint16_t w, h;
+                    bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
+                    bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2) - 2, BIG_DISPLAY_HEIGHT - 25);
+                    bigDisplay.println(callText);
+                    
+                    // Arrow icon
+                    bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) + (w / 2) + 2, BIG_DISPLAY_HEIGHT - 25, arrow_right, arrow_right_width, arrow_right_height, SSD1306_WHITE);
+
+                    // Phone icon
+                    bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
+
+                    // Add listener for OK button
+                    if (okButton.isPressed()) buttonStart = millis();
+                    else buttonStart = -1;
+                }
+            }
+
             break;
         }
     }

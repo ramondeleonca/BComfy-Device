@@ -37,6 +37,10 @@ class PushButton {
                 }
             }
         }
+
+        bool isPressed() {
+            return this->state == HIGH;
+        }
 };
 
 #endif
