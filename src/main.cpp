@@ -86,6 +86,13 @@ Buzzer buzzer(5);
 // Variables loaded in from preferences
 String emergencyNumber;
 
+// State
+// TODO: Move to a struct
+// Not pressed: -1
+int buttonStart = -1;
+int buttonDuration = 2000;
+bool calling = false;
+
 void registerCommands(Commands commands) {
     commands.addCommand("get_mac", [](Stream *serial, LinkedList<String> args) {
         serial->println(WiFi.macAddress());
@@ -141,10 +148,97 @@ void setup() {
     vibrationMotor.vibrate(500);
 }
 
-// Not pressed: -1
-int buttonStart = -1;
-int buttonDuration = 2000;
-bool calling = false;
+class BigDisplayUI {
+    public:
+        static void renderStatusBar() {
+            // Current screen text
+            bigDisplay.setTextSize(1);
+            bigDisplay.setTextColor(SSD1306_WHITE);
+            bigDisplay.setCursor(0, 0);
+            bigDisplay.println(screens[currentScreen]);
+
+            // Bluetooth icon
+            bigDisplay.drawBitmap(BIG_DISPLAY_WIDTH - bluetooth_width - 2, 1, bluetooth, bluetooth_width, bluetooth_height, SSD1306_WHITE);
+            
+            // Signal icon
+            bigDisplay.drawBitmap(BIG_DISPLAY_WIDTH - pin_star_width - 2 - bluetooth_width - 2, 1, pin_star, pin_star_width, pin_star_height, SSD1306_WHITE);
+
+            // Attention icon
+            bigDisplay.drawBitmap(BIG_DISPLAY_WIDTH - attention_width - 2 - pin_star_width - 2 - bluetooth_width - 2, 1, attention, attention_width, attention_height, SSD1306_WHITE);
+
+            // Separation line
+            bigDisplay.drawLine(0, 10, BIG_DISPLAY_WIDTH, 10, SSD1306_WHITE);
+        }
+
+        static void renderScreen() {
+            switch(currentScreen) {
+                case 0: {
+                    if (calling) {
+                        // Text
+                        String callText = "Llamando...";
+                        int16_t _;
+                        uint16_t w, h;
+                        bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
+                        bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2), BIG_DISPLAY_HEIGHT - 25);
+                        bigDisplay.println(callText);
+
+                        // Phone icon
+                        bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_check_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_check_big_height / 2) - 5, phone_check_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
+                    } else {
+                        if (buttonStart > -1) {
+                            if (millis() - buttonStart < buttonDuration) {
+                                // Text
+                                String callText = "Manten presionado...";
+                                int16_t _;
+                                uint16_t w, h;
+                                bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
+                                bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2), BIG_DISPLAY_HEIGHT - 25);
+                                bigDisplay.println(callText);
+
+                                // Draw progress bar
+                                bigDisplay.drawRect(2, BIG_DISPLAY_HEIGHT - 10, BIG_DISPLAY_WIDTH - 4, 8, SSD1306_WHITE);
+                                bigDisplay.fillRect(2, BIG_DISPLAY_HEIGHT - 10, map(millis() - buttonStart, 0, buttonDuration, 0, BIG_DISPLAY_WIDTH - 4), 8, SSD1306_WHITE);
+                
+                                // Phone icon
+                                bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
+                            } else {
+                                // Call
+                                calling = true;
+                            }
+                        } else {
+                            // Text
+                            String callText = "Llamar";
+                            int16_t _;
+                            uint16_t w, h;
+                            bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
+                            bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2) - 2, BIG_DISPLAY_HEIGHT - 25);
+                            bigDisplay.println(callText);
+                            
+                            // Arrow icon
+                            bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) + (w / 2) + 2, BIG_DISPLAY_HEIGHT - 25, arrow_right, arrow_right_width, arrow_right_height, SSD1306_WHITE);
+
+                            // Phone icon
+                            bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
+
+                            // Add listener for OK button
+                            if (okButton.isPressed()) buttonStart = millis();
+                            else buttonStart = -1;
+                        }
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        static void render() {
+            bigDisplay.clearDisplay();
+            renderStatusBar();
+            renderScreen();
+            bigDisplay.display();
+        }
+};
+
 void loop() {
     // HAL services
     backButton.service();
@@ -161,77 +255,7 @@ void loop() {
 
     // Displays
     // * BIG DISPLAY
-    bigDisplay.clearDisplay();
-    bigDisplay.setTextSize(1);
-    bigDisplay.setTextColor(SSD1306_WHITE);
-    bigDisplay.setCursor(0, 0);
-    bigDisplay.println(screens[currentScreen]);
-    bigDisplay.drawLine(0, 10, BIG_DISPLAY_WIDTH, 10, SSD1306_WHITE);
-
-    bigDisplay.drawBitmap(BIG_DISPLAY_WIDTH - bluetooth_width - 2, 1, bluetooth, bluetooth_width, bluetooth_height, SSD1306_WHITE);
-    bigDisplay.drawBitmap(BIG_DISPLAY_WIDTH - pin_star_width - 2 - bluetooth_width - 2, 1, pin_star, pin_star_width, pin_star_height, SSD1306_WHITE);
-    bigDisplay.drawBitmap(BIG_DISPLAY_WIDTH - attention_width - 2 - pin_star_width - 2 - bluetooth_width - 2, 1, attention, attention_width, attention_height, SSD1306_WHITE);
-
-    switch(currentScreen) {
-        case 0: {
-            if (calling) {
-                // Text
-                String callText = "Llamando...";
-                int16_t _;
-                uint16_t w, h;
-                bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
-                bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2), BIG_DISPLAY_HEIGHT - 25);
-                bigDisplay.println(callText);
-
-                // Phone icon
-                bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_check_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_check_big_height / 2) - 5, phone_check_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
-            } else {
-                if (buttonStart > -1) {
-                    if (millis() - buttonStart < buttonDuration) {
-                        // Text
-                        String callText = "Manten presionado...";
-                        int16_t _;
-                        uint16_t w, h;
-                        bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
-                        bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2), BIG_DISPLAY_HEIGHT - 25);
-                        bigDisplay.println(callText);
-
-                        // Draw progress bar
-                        bigDisplay.drawRect(2, BIG_DISPLAY_HEIGHT - 10, BIG_DISPLAY_WIDTH - 4, 8, SSD1306_WHITE);
-                        bigDisplay.fillRect(2, BIG_DISPLAY_HEIGHT - 10, map(millis() - buttonStart, 0, buttonDuration, 0, BIG_DISPLAY_WIDTH - 4), 8, SSD1306_WHITE);
-        
-                        // Phone icon
-                        bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
-                    } else {
-                        // Call
-                        calling = true;
-                    }
-                } else {
-                    // Text
-                    String callText = "Llamar";
-                    int16_t _;
-                    uint16_t w, h;
-                    bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
-                    bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2) - 2, BIG_DISPLAY_HEIGHT - 25);
-                    bigDisplay.println(callText);
-                    
-                    // Arrow icon
-                    bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) + (w / 2) + 2, BIG_DISPLAY_HEIGHT - 25, arrow_right, arrow_right_width, arrow_right_height, SSD1306_WHITE);
-
-                    // Phone icon
-                    bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
-
-                    // Add listener for OK button
-                    if (okButton.isPressed()) buttonStart = millis();
-                    else buttonStart = -1;
-                }
-            }
-
-            break;
-        }
-    }
-
-    bigDisplay.display();
+    BigDisplayUI::render();
 
     // * SMALL DISPLAY
     int previousScreen = Utils::Array::getRealIndex(screens, screensSize, currentScreen - 1);
