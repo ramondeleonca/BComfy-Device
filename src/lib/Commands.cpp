@@ -45,6 +45,7 @@ class Commands {
             LinkedList<String> args;
             int nextSepIndex;
             while (sepIndex != -1) {
+                // TODO: Ignore quotes preceeded by a backslash
                 if (input.charAt(sepIndex + 1) == '"') {
                     nextSepIndex = input.indexOf('"', sepIndex + 2);
                     nextSepIndex = input.indexOf(sep, nextSepIndex + 1);

@@ -5,3 +5,4 @@
 .vscode/ipch
 ignore
 src/aikey.h
+src/data.h
