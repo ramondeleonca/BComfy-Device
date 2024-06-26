@@ -8,6 +8,7 @@
 #include <Wire.h>
 #include <Preferences.h>
 #include <BluetoothSerial.h>
+#include <ESP32Time.h>
 #include "aikey.h"
 #include "lib/SIM800L.h"
 #include "hal/PushButton.cpp"
@@ -63,6 +64,9 @@ int currentScreen = 0;
 struct state {
     bool calling = false;
 };
+
+// Create an esp32time object
+ESP32Time rtc;
 
 // Preferences
 Preferences preferences;
@@ -308,11 +312,12 @@ class SmallDisplayUI {
         }
 
         static void renderBottomBar() {
-            String time = "Time";
+            // TODO: Make time blink
+            String time = rtc.getTime("%H:%M:%S");
             int16_t _;
             uint16_t w, h;
             smallDisplay.getTextBounds(time, 0, 0, &_, &_, &w, &h);
-            smallDisplay.setCursor((SMALL_DISPLAY_WIDTH / 2) - (w / 2), SMALL_DISPLAY_HEIGHT - 2);
+            smallDisplay.setCursor((SMALL_DISPLAY_WIDTH / 2) - (w / 2), SMALL_DISPLAY_HEIGHT - h);
             smallDisplay.println(time);
 
             smallDisplay.drawLine(0, SMALL_DISPLAY_HEIGHT - 10, SMALL_DISPLAY_WIDTH, SMALL_DISPLAY_HEIGHT - 10, SSD1306_WHITE);
