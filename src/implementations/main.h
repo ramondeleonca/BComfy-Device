@@ -18,6 +18,7 @@
 #include "comfyui/icons.h"
 #include "lib/Utils.h"
 #include "data.h"
+#include "mensajes.h"
 
 // Device config
 const String PRODUCT_NAME = "BComfy";
@@ -164,6 +165,7 @@ void setup() {
     vibrationMotor.vibrate(500);
 }
 
+String currentMessage = "";
 class BigDisplayUI {
     public:
         static void renderStatusBar() {
@@ -251,6 +253,28 @@ class BigDisplayUI {
 
                     break;
                 }
+                case 1: {
+                    // Text
+                    String callText = "Mensaje";
+                    int16_t _;
+                    uint16_t w, h;
+                    bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
+                    bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2) - 2, 15);
+                    bigDisplay.println(callText);
+                    
+                    // Arrow icon
+                    bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) + (w / 2) + 2, 15, arrow_right, arrow_right_width, arrow_right_height, SSD1306_WHITE);
+
+                    // Message
+                    bigDisplay.setCursor(0, 32);
+                    bigDisplay.println(currentMessage);
+
+                    // Bindings
+                    okButton.setOnRising([]() {
+                        currentMessage = mensajes[random(0, sizeof(mensajes) / sizeof(mensajes[0]))];
+                    });
+                    okButton.setOnFalling(NULL);
+                }
             }
         }
 
@@ -288,7 +312,7 @@ class SmallDisplayUI {
             int16_t _;
             uint16_t w, h;
             smallDisplay.getTextBounds(time, 0, 0, &_, &_, &w, &h);
-            smallDisplay.setCursor(SMALL_DISPLAY_WIDTH - 2 - arrow_up_width - w - 2, 2);
+            smallDisplay.setCursor((SMALL_DISPLAY_WIDTH / 2) - (w / 2), SMALL_DISPLAY_HEIGHT - 2);
             smallDisplay.println(time);
 
             smallDisplay.drawLine(0, SMALL_DISPLAY_HEIGHT - 10, SMALL_DISPLAY_WIDTH, SMALL_DISPLAY_HEIGHT - 10, SSD1306_WHITE);
