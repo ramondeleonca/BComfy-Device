@@ -9,6 +9,7 @@
 #include <Preferences.h>
 #include <BluetoothSerial.h>
 #include <ESP32Time.h>
+#include <WS2812FX.h>
 #include "aikey.h"
 #include "lib/SIM800L.h"
 #include "hal/PushButton.cpp"
@@ -55,6 +56,12 @@ const int SMALL_DISPLAY_SDA = 18;
 const int SMALL_DISPLAY_SCL = 19;
 TwoWire smallDisplayWire(1);
 Adafruit_SSD1306 smallDisplay(SMALL_DISPLAY_WIDTH, SMALL_DISPLAY_HEIGHT, &smallDisplayWire, -1);
+
+// LED Strip
+const int LED_PIN = 2;
+const int LED_COUNT = 10; 
+const int LED_BRIGHTNESS = 25;
+WS2812FX leds = WS2812FX(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // Contexts
 const String screens[] = {"Llamada", "Mensajes"};
@@ -106,8 +113,10 @@ String emergencyNumber;
 // TODO: Move to a struct
 // Not pressed: -1
 int buttonStart = -1;
-int buttonDuration = 2000;
+int buttonDuration = 1000;
 bool calling = false;
+int ledEffectDuration;
+int ledStart;
 
 void registerCommands(Commands commands) {
     commands.addCommand("get_mac", [](Stream *serial, LinkedList<String> args) {
@@ -151,6 +160,16 @@ void setup() {
 
     smallDisplay.display();
     bigDisplay.display();
+
+    // Init LED Strip
+    leds.begin();
+    leds.setBrightness(LED_BRIGHTNESS);
+    leds.setSpeed(1);
+    leds.setMode(FX_MODE_BREATH);
+    leds.setColor(0x0000FF);
+    leds.start();
+    ledEffectDuration = 1000;
+    ledStart = millis();
 
     // Register commands
     registerCommands(serialCommands);
@@ -207,7 +226,15 @@ class BigDisplayUI {
                         // Phone icon
                         bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_check_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_check_big_height / 2) - 5, phone_check_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
 
-                        if (!calling) sim800l.call(emergencyNumber);
+                        if (!calling) {
+                            calling = sim800l.call(emergencyNumber);
+                            leds.setSpeed(1);
+                            leds.setMode(FX_MODE_BREATH);
+                            leds.setColor(0x00FF00);
+                            leds.start();
+                            ledEffectDuration = 250;
+                            ledStart = millis();
+                        }
                     } else {
                         if (buttonStart > -1) {
                             if (millis() - buttonStart < buttonDuration) {
@@ -275,6 +302,12 @@ class BigDisplayUI {
 
                     // Bindings
                     okButton.setOnRising([]() {
+                        leds.setMode(FX_MODE_BLINK);
+                        leds.setColor(0x0000FF);
+                        leds.setSpeed(1);
+                        leds.start();
+                        ledStart = millis();
+                        ledEffectDuration = 250;
                         currentMessage = mensajes[random(0, sizeof(mensajes) / sizeof(mensajes[0]))];
                     });
                     okButton.setOnFalling(NULL);
@@ -352,7 +385,9 @@ void loop() {
     // * SMALL DISPLAY
     SmallDisplayUI::render();
 
-    // currentScreen = potentiometer.getValue() / 512;
+    // LED Strip
+    if (millis() - ledStart > ledEffectDuration) leds.setColor(0);
+    leds.service();
 }
 
 #else
