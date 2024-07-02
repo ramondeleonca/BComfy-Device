@@ -130,6 +130,13 @@ void registerCommands(Commands commands) {
     commands.addCommand("echo", [](Stream *serial, LinkedList<String> args) {
         serial->println(args.get(0));
     });
+
+    commands.addCommand("sim", [](Stream *serial, LinkedList<String> args) {
+        String result = "";
+        for (int i = 0; i < args.size(); i++) result += args.get(i) + " ";
+        result.trim();
+        SIM800lSerial.println(result);
+    });
 }
 
 void setup() {
@@ -427,6 +434,4 @@ void loop() {
     leds.service();
 }
 
-#else
-#error "MAIN_CPP already defined!"
 #endif
