@@ -64,13 +64,9 @@ const int LED_BRIGHTNESS = 25;
 WS2812FX leds = WS2812FX(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // Contexts
-const String screens[] = {"Llamada", "Mensajes"};
+const String screens[] = {"Llamada", "Mensajes", "Juego"};
 const int screensSize = sizeof(screens) / sizeof(screens[0]);
 int currentScreen = 0;
-
-struct state {
-    bool calling = false;
-};
 
 // Create an esp32time object
 ESP32Time rtc;
@@ -104,7 +100,7 @@ Buzzer buzzer(5);
 const int SIM_RX = 16;
 const int SIM_TX = 17;
 HardwareSerial SIM800lSerial(2);
-SIM800l sim800l(&SIM800lSerial);
+// SIM800l sim800l(&SIM800lSerial);
 
 // Variables loaded in from preferences
 String emergencyNumber;
@@ -115,8 +111,12 @@ String emergencyNumber;
 int buttonStart = -1;
 int buttonDuration = 1000;
 bool calling = false;
+bool callingRequest = false;
+bool isJumping = false;
 int ledEffectDuration;
 int ledStart;
+const int jumpHeight = cacatus_height + 2;
+const int gameSpeed = 1 / 100;
 
 void registerCommands(Commands commands) {
     commands.addCommand("get_mac", [](Stream *serial, LinkedList<String> args) {
@@ -148,7 +148,6 @@ void setup() {
 
     // Begin SIM800L
     SIM800lSerial.begin(9600, SERIAL_8N1, SIM_RX, SIM_TX);
-    sim800l.begin();
 
     // Begin I2C for displays
     Wire.begin();
@@ -226,8 +225,15 @@ class BigDisplayUI {
                         // Phone icon
                         bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_check_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_check_big_height / 2) - 5, phone_check_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
 
-                        if (!calling) {
-                            calling = sim800l.call(emergencyNumber);
+                        // Serial.println("Si Pinguino");
+                        if (!callingRequest) {
+                            Serial.println("No Pinguino");
+                            SIM800lSerial.println("AT");
+                            SIM800lSerial.println("ATD" + TEST_NUMBER + ";");
+                            Serial.println("ATD" + TEST_NUMBER + ";");
+                            callingRequest = true;
+                            while (!SIM800lSerial.available()) delay(1);
+                            if (!SIM800lSerial.available()) Serial.write(SIM800lSerial.read());
                             leds.setSpeed(1);
                             leds.setMode(FX_MODE_BREATH);
                             leds.setColor(0x00FF00);
@@ -235,6 +241,15 @@ class BigDisplayUI {
                             ledEffectDuration = 250;
                             ledStart = millis();
                         }
+
+                        // Hang up
+                        backButton.setOnRising([]() {
+                            SIM800lSerial.println("AT");
+                            SIM800lSerial.println("ATH");
+                            callingRequest = false;
+                            calling = false;
+                            buttonStart = -1;
+                        });
                     } else {
                         if (buttonStart > -1) {
                             if (millis() - buttonStart < buttonDuration) {
@@ -312,6 +327,28 @@ class BigDisplayUI {
                     });
                     okButton.setOnFalling(NULL);
                 }
+
+                // case 2: {
+                //     // Cactus
+                //     bigDisplay.drawBitmap(0, BIG_DISPLAY_HEIGHT - cacatus_height, cacatus, cacatus_width, cacatus_height, SSD1306_WHITE);
+
+                //     // Jump
+                //     if (isJumping) {
+                //         bigDisplay.drawBitmap(0, BIG_DISPLAY_HEIGHT - jumpHeight, cacatus, cacatus_width, cacatus_height, SSD1306_WHITE);
+                //         if (millis() - buttonStart > 100) {
+                //             isJumping = false;
+                //             buttonStart = -1;
+                //         }
+                //     }
+
+                //     // Bindings
+                //     okButton.setOnRising([]() {
+                //         isJumping = true;
+                //     });
+                //     okButton.setOnFalling([]() {
+                //         isJumping = false;
+                //     });
+                // }
             }
         }
 

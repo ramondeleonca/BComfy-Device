@@ -3,12 +3,18 @@
 
 #include <Arduino.h>
 
+struct beep_t {
+    int duration = 250;
+    int frequency = 500;
+    int delay = 0;
+};
+
 class Buzzer {
     private:
         int pin;
         int frequency;
         int duration;
-        unsigned long startTime;
+        int startTime;
         bool active = false;
 
     public:
@@ -23,6 +29,12 @@ class Buzzer {
             this->startTime = millis();
             this->active = true;
         }
+
+        // void beepSequence(beep_t* sequence[]) {
+        //     for (int i = 0; i < sizeof(sequence) / sizeof(sequence[0]); i++) {
+                
+        //     }
+        // }
 
         void service() {
             if (this->active) {
