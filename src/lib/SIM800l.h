@@ -6,12 +6,12 @@
 // UNCOMMENT THIS LINE TO ENABLE DEBUGGING
 #define DEBUG
 
-class SIM800l {
+class SIM800L {
     private:
         Stream *serial;
 
     public:
-        SIM800l(Stream *serial) {
+        SIM800L(Stream *serial) {
             this->serial = serial;
         }
 
@@ -30,14 +30,21 @@ class SIM800l {
         bool setVolume(int volume) {
             return this->sendAtCommandWithReply("AT+CLVL=" + String(volume)).indexOf("OK") != -1;
         }
-        
-        void sendAtCommandWithoutReply(String command) {
-            this->serial->println(command);
+
+        bool sendSms(String number, String message) {
+            this->serial->println("AT+CMGF=1");
+            this->serial->readStringUntil('\n');
+            this->serial->println("AT+CMGS=\"" + number + "\"");
+            this->serial->readStringUntil('\n');
+            this->serial->print(message);
+            this->serial->write(26);
+            // return this->serial->readStringUntil('\n').indexOf("OK") != -1;
+            return true;
         }
 
         String sendAtCommandWithReply(String command) {
             this->serial->println(command);
-            return this->serial->readString();
+            return this->serial->readStringUntil('\n');
         }
 };
 

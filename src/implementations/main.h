@@ -1,4 +1,4 @@
-#ifndef MAIN_CPP
+  #ifndef MAIN_CPP
 #define MAIN_CPP
 
 #include <Arduino.h>
@@ -100,7 +100,7 @@ Buzzer buzzer(5);
 const int SIM_RX = 16;
 const int SIM_TX = 17;
 HardwareSerial SIM800lSerial(2);
-// SIM800l sim800l(&SIM800lSerial);
+// SIM800L sim800l(&SIM800lSerial);
 
 // Variables loaded in from preferences
 String emergencyNumber;
@@ -112,11 +112,20 @@ int buttonStart = -1;
 int buttonDuration = 1000;
 bool calling = false;
 bool callingRequest = false;
-bool isJumping = false;
 int ledEffectDuration;
 int ledStart;
-const int jumpHeight = cacatus_height + 2;
-const int gameSpeed = 1 / 100;
+
+// ! GAME
+int GAME_CACTUS_EVERY = 3000;
+int GAME_SCORE = 0;
+int GAME_SPEED = 1;
+int GAME_JUMP_HEIGHT = cacatus_height + 3;
+int gameStart = -1;
+bool gameLost = false;
+bool gameIsJumping = false;
+const int maxCacti = 10;
+int gameLastCactus = -1;
+LinkedList<int> cacti(maxCacti, -1);
 
 void registerCommands(Commands commands) {
     commands.addCommand("get_mac", [](Stream *serial, LinkedList<String> args) {
@@ -218,144 +227,222 @@ class BigDisplayUI {
         }
 
         static void renderScreen() {
-            switch(currentScreen) {
-                case 0: {
-                    if (calling) {
-                        // Text
-                        String callText = "Llamando...";
-                        int16_t _;
-                        uint16_t w, h;
-                        bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
-                        bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2), BIG_DISPLAY_HEIGHT - 25);
-                        bigDisplay.println(callText);
-
-                        // Phone icon
-                        bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_check_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_check_big_height / 2) - 5, phone_check_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
-
-                        // Serial.println("Si Pinguino");
-                        if (!callingRequest) {
-                            Serial.println("No Pinguino");
-                            SIM800lSerial.println("AT");
-                            SIM800lSerial.println("ATD" + TEST_NUMBER + ";");
-                            Serial.println("ATD" + TEST_NUMBER + ";");
-                            callingRequest = true;
-                            while (!SIM800lSerial.available()) delay(1);
-                            if (!SIM800lSerial.available()) Serial.write(SIM800lSerial.read());
-                            leds.setSpeed(1);
-                            leds.setMode(FX_MODE_BREATH);
-                            leds.setColor(0x00FF00);
-                            leds.start();
-                            ledEffectDuration = 250;
-                            ledStart = millis();
-                        }
-
-                        // Hang up
-                        backButton.setOnRising([]() {
-                            SIM800lSerial.println("AT");
-                            SIM800lSerial.println("ATH");
-                            callingRequest = false;
-                            calling = false;
-                            buttonStart = -1;
-                        });
-                    } else {
-                        if (buttonStart > -1) {
-                            if (millis() - buttonStart < buttonDuration) {
-                                // Text
-                                String callText = "Manten presionado...";
-                                int16_t _;
-                                uint16_t w, h;
-                                bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
-                                bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2), BIG_DISPLAY_HEIGHT - 25);
-                                bigDisplay.println(callText);
-
-                                // Draw progress bar
-                                bigDisplay.drawRect(2, BIG_DISPLAY_HEIGHT - 10, BIG_DISPLAY_WIDTH - 4, 8, SSD1306_WHITE);
-                                bigDisplay.fillRect(2, BIG_DISPLAY_HEIGHT - 10, map(millis() - buttonStart, 0, buttonDuration, 0, BIG_DISPLAY_WIDTH - 4), 8, SSD1306_WHITE);
-                
-                                // Phone icon
-                                bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
-                            } else {
-                                // Call
-                                calling = true;
-                            }
-                        } else {
-                            // Text
-                            String callText = "Llamar";
-                            int16_t _;
-                            uint16_t w, h;
-                            bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
-                            bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2) - 2, BIG_DISPLAY_HEIGHT - 25);
-                            bigDisplay.println(callText);
-                            
-                            // Arrow icon
-                            bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) + (w / 2) + 2, BIG_DISPLAY_HEIGHT - 25, arrow_right, arrow_right_width, arrow_right_height, SSD1306_WHITE);
-
-                            // Phone icon
-                            bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
-
-                            // Add listener for OK button
-                            okButton.setOnRising([]() {
-                                buttonStart = millis();
-                            });
-
-                            okButton.setOnFalling([]() {
-                                if (millis() - buttonStart < buttonDuration) buttonStart = -1;
-                            });
-                        }
-                    }
-
-                    break;
-                }
-                case 1: {
+            if (currentScreen == 0) {
+                if (calling) {
                     // Text
-                    String callText = "Mensaje";
+                    String callText = "Llamando...";
                     int16_t _;
                     uint16_t w, h;
                     bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
-                    bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2) - 2, 15);
+                    bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2), BIG_DISPLAY_HEIGHT - 25);
                     bigDisplay.println(callText);
-                    
+
+                    // Phone icon
+                    bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_check_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_check_big_height / 2) - 5, phone_check_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
+
+                    // Serial.println("Si Pinguino");
+                    if (!callingRequest) {
+                        Serial.println("No Pinguino");
+                        SIM800lSerial.println("AT");
+                        SIM800lSerial.println("ATD" + TEST_NUMBER + ";");
+                        Serial.println("ATD" + TEST_NUMBER + ";");
+                        callingRequest = true;
+                        while (!SIM800lSerial.available()) delay(1);
+                        if (!SIM800lSerial.available()) Serial.write(SIM800lSerial.read());
+                        leds.setSpeed(1);
+                        leds.setMode(FX_MODE_BREATH);
+                        leds.setColor(0x00FF00);
+                        leds.start();
+                        ledEffectDuration = 250;
+                        ledStart = millis();
+                    }
+
+                    // Hang up
+                    backButton.setOnRising([]() {
+                        SIM800lSerial.println("AT");
+                        SIM800lSerial.println("ATH");
+                        callingRequest = false;
+                        calling = false;
+                        buttonStart = -1;
+                    });
+                } else {
+                    if (buttonStart > -1) {
+                        if (millis() - buttonStart < buttonDuration) {
+                            // Text
+                            String callText = "Manten presionado...";
+                            int16_t _;
+                            uint16_t w, h;
+                            bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
+                            bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2), BIG_DISPLAY_HEIGHT - 25);
+                            bigDisplay.println(callText);
+
+                            // Draw progress bar
+                            bigDisplay.drawRect(2, BIG_DISPLAY_HEIGHT - 10, BIG_DISPLAY_WIDTH - 4, 8, SSD1306_WHITE);
+                            bigDisplay.fillRect(2, BIG_DISPLAY_HEIGHT - 10, map(millis() - buttonStart, 0, buttonDuration, 0, BIG_DISPLAY_WIDTH - 4), 8, SSD1306_WHITE);
+            
+                            // Phone icon
+                            bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
+                        } else {
+                            // Call
+                            calling = true;
+                        }
+                    } else {
+                        // Text
+                        String callText = "Llamar";
+                        int16_t _;
+                        uint16_t w, h;
+                        bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
+                        bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2) - 2, BIG_DISPLAY_HEIGHT - 25);
+                        bigDisplay.println(callText);
+                        
+                        // Arrow icon
+                        bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) + (w / 2) + 2, BIG_DISPLAY_HEIGHT - 25, arrow_right, arrow_right_width, arrow_right_height, SSD1306_WHITE);
+
+                        // Phone icon
+                        bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) - (phone_outgoing_big_width / 2), (BIG_DISPLAY_HEIGHT / 2) - (phone_outgoing_big_height / 2) - 5, phone_outgoing_big, phone_check_big_width, phone_check_big_height, SSD1306_WHITE);
+
+                        // Add listener for OK button
+                        okButton.setOnRising([]() {
+                            buttonStart = millis();
+                        });
+
+                        okButton.setOnFalling([]() {
+                            if (millis() - buttonStart < buttonDuration) buttonStart = -1;
+                        });
+                    }
+                }
+                gameStart = -1;
+            } else if (currentScreen == 1) {
+                // Text
+                String callText = "Mensaje";
+                int16_t _;
+                uint16_t w, h;
+                bigDisplay.getTextBounds(callText, 0, 0, &_, &_, &w, &h);
+                bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2) - 2, 15);
+                bigDisplay.println(callText);
+                
+                // Arrow icon
+                bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) + (w / 2) + 2, 15, arrow_right, arrow_right_width, arrow_right_height, SSD1306_WHITE);
+
+                // Message
+                bigDisplay.setCursor(0, 32);
+                bigDisplay.println(currentMessage);
+
+                // Bindings
+                okButton.setOnRising([]() {
+                    leds.setMode(FX_MODE_BLINK);
+                    leds.setColor(0x0000FF);
+                    leds.setSpeed(1);
+                    leds.start();
+                    ledStart = millis();
+                    ledEffectDuration = 250;
+                    currentMessage = mensajes[random(0, sizeof(mensajes) / sizeof(mensajes[0]))];
+                });
+                okButton.setOnFalling(NULL);
+                gameStart = -1;
+            } else if (currentScreen == 2) {
+                if (gameStart > -1 ) {
+                    // ! GAME
+                    int nowTime = millis();
+                    gameLost = false;
+
+                    okButton.setOnRising([]() {
+                        gameIsJumping = true;
+                    });
+
+                    okButton.setOnFalling([]() {
+                        gameIsJumping = false;
+                    });
+
+                    if (nowTime - gameStart > GAME_CACTUS_EVERY) {
+                        cacti.add(BIG_DISPLAY_WIDTH);
+                        gameStart = nowTime;
+                    }
+
+                    // Draw cacti
+                    for (int i = 0; i < cacti.size(); i++) {
+                        int cactus = cacti.get(i);
+                        if (cactus > -1) {
+                            bigDisplay.drawBitmap(cactus, BIG_DISPLAY_HEIGHT - 2 - cacatus_height, cacatus, cacatus_width, cacatus_height, SSD1306_WHITE);
+                            cacti.set(i, cactus - GAME_SPEED);
+
+                            // Check collision
+                            if (!gameIsJumping && 10 + dino_width > cactus) {
+                                // GAME OVER
+                                cacti.clear();
+                                GAME_SCORE = 0;
+                                gameLost = true;
+                                leds.setMode(FX_MODE_BLINK);
+                                leds.setColor(0xFF0000);
+                                leds.setSpeed(2);
+                                leds.start();
+                                buzzer.beep(500, 250);
+                                vibrationMotor.vibrate(500);
+                                ledStart = millis();
+                                ledEffectDuration = 500;
+                                gameStart = -1;
+                            }
+                        } else {
+                            cacti.remove(i);
+                            // Adds 10 at beginning
+                            GAME_SCORE++;
+                        }
+                    }
+
+                    // Draw player
+                    if (gameIsJumping) {
+                        bigDisplay.drawBitmap(10, BIG_DISPLAY_HEIGHT - 2 - dino_height - GAME_JUMP_HEIGHT, dino, dino_width, dino_height, SSD1306_WHITE);
+                    } else {
+                        bigDisplay.drawBitmap(10, BIG_DISPLAY_HEIGHT - 2 - dino_height, dino, dino_width, dino_height, SSD1306_WHITE);
+                    }
+
+                    // Draw Score
+                    String text = "Score: " + String(GAME_SCORE);
+                    int16_t _;
+                    uint16_t w, h;
+                    bigDisplay.getTextBounds(text, 0, 0, &_, &_, &w, &h);
+                    bigDisplay.setCursor(BIG_DISPLAY_WIDTH - w - 2, 15);
+                    bigDisplay.println(text);
+                } else {
+                    // ! START SCREEN
+                    // Text
+                    String text = "Iniciar";
+                    int16_t _;
+                    uint16_t w, h;
+                    bigDisplay.getTextBounds(text, 0, 0, &_, &_, &w, &h);
+                    bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2) - 2, 15);
+                    bigDisplay.println(text);
+
+                    // If lost
+                    if (gameLost) {
+                        // Text
+                        String text = "--- Chocaste ---";
+                        int16_t _;
+                        uint16_t w, h;
+                        bigDisplay.getTextBounds(text, 0, 0, &_, &_, &w, &h);
+                        bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2) - 2, (BIG_DISPLAY_HEIGHT / 2) - (h / 2));
+                        bigDisplay.println(text);
+                    }
+
                     // Arrow icon
                     bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) + (w / 2) + 2, 15, arrow_right, arrow_right_width, arrow_right_height, SSD1306_WHITE);
 
-                    // Message
-                    bigDisplay.setCursor(0, 32);
-                    bigDisplay.println(currentMessage);
-
-                    // Bindings
                     okButton.setOnRising([]() {
-                        leds.setMode(FX_MODE_BLINK);
-                        leds.setColor(0x0000FF);
-                        leds.setSpeed(1);
-                        leds.start();
-                        ledStart = millis();
-                        ledEffectDuration = 250;
-                        currentMessage = mensajes[random(0, sizeof(mensajes) / sizeof(mensajes[0]))];
+                        gameStart = millis();
                     });
-                    okButton.setOnFalling(NULL);
+
+                    // draw player
+                    bigDisplay.drawBitmap(10, BIG_DISPLAY_HEIGHT - 2 - dino_height, dino, dino_width, dino_height, SSD1306_WHITE);
+
+                    // Draw cacti
+                    for (int i = 0; i < cacti.size(); i++) {
+                        int cactus = cacti.get(i);
+                        if (cactus > -1) {
+                            bigDisplay.drawBitmap(cactus, BIG_DISPLAY_HEIGHT - 2 - cacatus_height, cacatus, cacatus_width, cacatus_height, SSD1306_WHITE);
+                        }
+                    }
                 }
 
-                // case 2: {
-                //     // Cactus
-                //     bigDisplay.drawBitmap(0, BIG_DISPLAY_HEIGHT - cacatus_height, cacatus, cacatus_width, cacatus_height, SSD1306_WHITE);
-
-                //     // Jump
-                //     if (isJumping) {
-                //         bigDisplay.drawBitmap(0, BIG_DISPLAY_HEIGHT - jumpHeight, cacatus, cacatus_width, cacatus_height, SSD1306_WHITE);
-                //         if (millis() - buttonStart > 100) {
-                //             isJumping = false;
-                //             buttonStart = -1;
-                //         }
-                //     }
-
-                //     // Bindings
-                //     okButton.setOnRising([]() {
-                //         isJumping = true;
-                //     });
-                //     okButton.setOnFalling([]() {
-                //         isJumping = false;
-                //     });
-                // }
             }
         }
 
