@@ -1,4 +1,4 @@
-  #ifndef MAIN_CPP
+#ifndef MAIN_CPP
 #define MAIN_CPP
 
 #include <Arduino.h>
