@@ -9,7 +9,7 @@
 class SIM800L {
     private:
         Stream *serial;
-        Strnig last;
+        String last;
 
     public:
         SIM800L(Stream *serial) {
@@ -17,7 +17,7 @@ class SIM800L {
 
             // Check if serial begun, if not begin with 9600 baud, 8 stop bits and no parity
             if (false) {
-                serial.begin(9600);
+                Serial.begin(9600);
             }
         }
 

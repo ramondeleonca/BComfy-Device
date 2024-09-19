@@ -21,6 +21,13 @@
 #include "lib/Utils.h"
 #include "data.h"
 #include "mensajes.h"
+#include "FS.h"
+#include "SPIFFS.h"
+#include <LinkedList.h>
+
+// Messages array
+String messages[10] = {};
+const String FN_MessagesFile = "messages.txt";
 
 // Device config
 const String PRODUCT_NAME = "BComfy";
@@ -32,12 +39,12 @@ const String DEVICE_NAME = PRODUCT_NAME + "." + DEVICE_ID;
 // AI Config
 // * PROVISION API KEY IN aikey.h
 const String OPENAI_API_KEY = AI_KEY;
-const String OPENAI_MODEL = "gpt-3.5-turbo-0125";
-const String OPENAI_CHAT_SYSTEM = "Your job is to generate motivational messages for a person with anxiety, these messages must not exceed 100 tokens, return only the message";
-const int OPENAI_CHAT_TOKENS = 200;
-const float OPENAI_CHAT_TEMPERATURE = 0.7;
-const float OPENAI_CHAT_PRESENCE_PENALTY = 0.5;
-const float OPENAI_CHAT_FREQUENCY_PENALTY = 0.5;
+const String OPENAI_MODEL = "gpt-4o-mini";
+const String OPENAI_CHAT_SYSTEM = "Tu trabajo es generar frases motivacionales, cada una de menos de 8 palabras para una persona con ansiedad y TDAH. Se enviará el numero de frases que debe generar y debe responder con esa cantidad de frases separadas por un salto de linea";
+const int OPENAI_CHAT_TOKENS = 350;
+const float OPENAI_CHAT_TEMPERATURE = 0.85;
+const float OPENAI_CHAT_PRESENCE_PENALTY = 0.1;
+const float OPENAI_CHAT_FREQUENCY_PENALTY = 0;
 OpenAI openai(OPENAI_API_KEY.c_str());
 OpenAI_ChatCompletion chat(openai);
 
@@ -154,6 +161,11 @@ void setup() {
 
     // Init preferences
     preferences.begin(PRODUCT_NAME.c_str(), false);
+
+    // Init SPIFFS
+    if (!SPIFFS.begin()) {
+        Serial.println("SPIFFS FAILED, PANIC");
+    }
 
     // Load persistent variables
     // emergencyNumber = preferences.getString("emergencyNumber");
