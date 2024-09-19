@@ -1,4 +1,4 @@
-  #ifndef MAIN_CPP
+#ifndef MAIN_CPP
 #define MAIN_CPP
 
 #include <Arduino.h>
@@ -19,8 +19,12 @@
 #include "lib/Commands.h"
 #include "comfyui/icons.h"
 #include "lib/Utils.h"
+#include "lib/BComfySettings.h"
 #include "data.h"
 #include "mensajes.h"
+#include <TinyGPSPlus.h>
+#include <SPIFFS.h>
+#include <LinkedList.h>
 
 // Device config
 const String PRODUCT_NAME = "BComfy";
@@ -58,15 +62,18 @@ TwoWire smallDisplayWire(1);
 Adafruit_SSD1306 smallDisplay(SMALL_DISPLAY_WIDTH, SMALL_DISPLAY_HEIGHT, &smallDisplayWire, -1);
 
 // LED Strip
-const int LED_PIN = 2;
-const int LED_COUNT = 10; 
+// const int LED_PIN = 2;
+const int LED_PIN = 15;
+const int LED_COUNT = 16; 
 const int LED_BRIGHTNESS = 25;
 WS2812FX leds = WS2812FX(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // Contexts
-const String screens[] = {"Llamada", "Mensajes", "Juego"};
+const String screens[] = {"Llamada", "Mensajes", "Juego", "Configuracion"};
 const int screensSize = sizeof(screens) / sizeof(screens[0]);
 int currentScreen = 0;
+
+// Settings
 
 // Create an esp32time object
 ESP32Time rtc;
@@ -88,7 +95,7 @@ PushButton dnButton(14);
 PushButton okButton(27);
 
 // Potentiometer
-Potentiometer potentiometer(15);
+// Potentiometer potentiometer(15);
 
 // Vibration motor
 VibrationMotor vibrationMotor(4);
@@ -97,10 +104,15 @@ VibrationMotor vibrationMotor(4);
 Buzzer buzzer(5);
 
 // SimSerial
-const int SIM_RX = 16;
-const int SIM_TX = 17;
-HardwareSerial SIM800lSerial(2);
-// SIM800L sim800l(&SIM800lSerial);
+const int SIM_RX = 4;
+const int SIM_TX = 2;
+HardwareSerial SIM800lSerial(1);
+
+// GPS
+const int GPS_RX = 16;
+const int GPS_TX = 17;
+HardwareSerial neogps(2);
+TinyGPSPlus gps;
 
 // Variables loaded in from preferences
 String emergencyNumber;
@@ -112,6 +124,8 @@ int buttonStart = -1;
 int buttonDuration = 1000;
 bool calling = false;
 bool callingRequest = false;
+
+// Leds
 int ledEffectDuration;
 int ledStart;
 
@@ -126,6 +140,51 @@ bool gameIsJumping = false;
 const int maxCacti = 10;
 int gameLastCactus = -1;
 LinkedList<int> cacti(maxCacti, -1);
+
+TaskHandle_t backgroundTaskHandle;
+void backgroundTask(void* params) {
+    while (true) {
+        // Parse GPS
+        while (neogps.available()) gps.encode(neogps.read());
+
+        // Check SMS
+        Serial.println("Checking for new SMS...");
+        SIM800lSerial.println("AT+CMGL=\"REC UNREAD\"");
+        delay(500);
+
+        String response = "";
+        while (SIM800lSerial.available()) {
+            char c = SIM800lSerial.read();
+            response += c;
+        }
+        
+        Serial.print("SIM800 Response: ");
+        Serial.println(response);
+
+        if (response.indexOf("+CMTI") != -1) {
+            // SMS found, sending location
+            SIM800lSerial.println("AT");
+            SIM800lSerial.println("AT+CMGF=1");
+            SIM800lSerial.println("AT+CMGD=1,4");
+            SIM800lSerial.println("AT+CMGS=\"" + TEST_NUMBER + "\"");
+            delay(500);
+            SIM800lSerial.print("http://maps.google.com/maps?q=loc:");
+            // TODO: Fix GPS
+            SIM800lSerial.print(gps.location.lat(), 6);
+            SIM800lSerial.print(",");
+            SIM800lSerial.print(gps.location.lng(), 6);
+            delay(100);
+            SIM800lSerial.write(0x1A);
+
+        } else {
+            Serial.println("No unread SMS found.");
+        }
+
+        delay(2000);
+    }
+}
+
+// TODO: BACKGROUND TASK FOR SMS
 
 void registerCommands(Commands commands) {
     commands.addCommand("get_mac", [](Stream *serial, LinkedList<String> args) {
@@ -164,6 +223,10 @@ void setup() {
 
     // Begin SIM800L
     SIM800lSerial.begin(9600, SERIAL_8N1, SIM_RX, SIM_TX);
+    SIM800lSerial.println("AT+CMGF=1");
+
+    // Begin GPS
+    // neogps.begin(9600, SERIAL_8N1, GPS_RX, GPS_TX);
 
     // Begin I2C for displays
     Wire.begin();
@@ -172,19 +235,14 @@ void setup() {
     // Begin Displays
     smallDisplay.begin(SSD1306_SWITCHCAPVCC, SMALL_DISPLAY_ADDRESS);
     bigDisplay.begin(SSD1306_SWITCHCAPVCC, BIG_DISPLAY_ADDRESS);
+    bigDisplay.setRotation(2);
+
+    // Clear displays
+    smallDisplay.clearDisplay();
+    bigDisplay.clearDisplay();
 
     smallDisplay.display();
     bigDisplay.display();
-
-    // Init LED Strip
-    leds.begin();
-    leds.setBrightness(LED_BRIGHTNESS);
-    leds.setSpeed(1);
-    leds.setMode(FX_MODE_BREATH);
-    leds.setColor(0x0000FF);
-    leds.start();
-    ledEffectDuration = 1000;
-    ledStart = millis();
 
     // Register commands
     registerCommands(serialCommands);
@@ -201,6 +259,20 @@ void setup() {
 
     // Final bootup
     vibrationMotor.vibrate(500);
+
+    // Set LED Strip state
+    delay(500);
+    leds.begin();
+    leds.setBrightness(69);
+    leds.setSpeed(1);
+    leds.setMode(FX_MODE_BREATH);
+    leds.setColor(0x0000FF);
+    leds.start();
+    ledEffectDuration = -1;
+    ledStart = millis();
+
+    // Start background task
+    xTaskCreate(backgroundTask, "backgroundTask", 4096, NULL, 1, &backgroundTaskHandle);
 }
 
 String currentMessage = "";
@@ -244,8 +316,20 @@ class BigDisplayUI {
                     if (!callingRequest) {
                         Serial.println("No Pinguino");
                         SIM800lSerial.println("AT");
+                        SIM800lSerial.println("AT+CLVL=100");
+                        delay(500);
                         SIM800lSerial.println("ATD" + TEST_NUMBER + ";");
-                        Serial.println("ATD" + TEST_NUMBER + ";");
+                        SIM800lSerial.println("AT+CMGF=1");
+                        SIM800lSerial.println("AT+CMGD=1,4");
+                        SIM800lSerial.println("AT+CMGS=\"" + TEST_NUMBER + "\"");
+                        delay(500);
+                        SIM800lSerial.print("http://maps.google.com/maps?q=loc:");
+                        // TODO: Fix GPS
+                        SIM800lSerial.print(gps.location.lat(), 6);
+                        SIM800lSerial.print(",");
+                        SIM800lSerial.print(gps.location.lng(), 6);
+                        delay(100);
+                        SIM800lSerial.write(0x1A);
                         callingRequest = true;
                         while (!SIM800lSerial.available()) delay(1);
                         if (!SIM800lSerial.available()) Serial.write(SIM800lSerial.read());
@@ -376,16 +460,23 @@ class BigDisplayUI {
                                 leds.setColor(0xFF0000);
                                 leds.setSpeed(2);
                                 leds.start();
-                                buzzer.beep(500, 250);
-                                vibrationMotor.vibrate(500);
                                 ledStart = millis();
                                 ledEffectDuration = 500;
+                                buzzer.beep(500, 250);
+                                vibrationMotor.vibrate(500);
                                 gameStart = -1;
                             }
                         } else {
                             cacti.remove(i);
                             // Adds 10 at beginning
                             GAME_SCORE++;
+
+                            leds.setMode(FX_MODE_BLINK);
+                            leds.setColor(0x00FF00);
+                            leds.setSpeed(2);
+                            leds.start();
+                            ledStart = millis();
+                            ledEffectDuration = 250;
                         }
                     }
 
@@ -403,6 +494,14 @@ class BigDisplayUI {
                     bigDisplay.getTextBounds(text, 0, 0, &_, &_, &w, &h);
                     bigDisplay.setCursor(BIG_DISPLAY_WIDTH - w - 2, 15);
                     bigDisplay.println(text);
+
+                    // Exit 
+                    backButton.setOnRising([]() {
+                        cacti.clear();
+                        GAME_SCORE = 0;
+                        gameLost = false;
+                        gameStart = -1;
+                    });
                 } else {
                     // ! START SCREEN
                     // Text
@@ -443,6 +542,14 @@ class BigDisplayUI {
                     }
                 }
 
+            } else if (currentScreen == 3) {
+                // Render Proximamente in the center of the screen
+                String text = "Proximamente";
+                int16_t _;
+                uint16_t w, h;
+                bigDisplay.getTextBounds(text, 0, 0, &_, &_, &w, &h);
+                bigDisplay.setCursor((BIG_DISPLAY_WIDTH / 2) - (w / 2) - 2, (BIG_DISPLAY_HEIGHT / 2) - (h / 2));
+                bigDisplay.println(text);
             }
         }
 
@@ -501,13 +608,9 @@ void loop() {
     upButton.service();
     dnButton.service();
     okButton.service();
-    potentiometer.service();
-    vibrationMotor.service();
-    buzzer.service();
-
-    // Serial commands
-    if (Serial.available()) serialCommands.readSerial();
-    if (SerialBT.available()) bluetoothCommands.readSerial();
+    // potentiometer.service();
+    // vibrationMotor.service();
+    // buzzer.service();
 
     // Displays
     // * BIG DISPLAY
@@ -515,6 +618,10 @@ void loop() {
 
     // * SMALL DISPLAY
     SmallDisplayUI::render();
+
+    // Serial commands
+    if (Serial.available()) serialCommands.readSerial();
+    if (SerialBT.available()) bluetoothCommands.readSerial();
 
     // LED Strip
     if (millis() - ledStart > ledEffectDuration) leds.setColor(0);

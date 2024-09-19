@@ -5,6 +5,7 @@
 #include <Adafruit_SSD1306.h>
 #include <comfyui/elements/ComfyUIElement.h>
 #include <comfyui/types.h>
+#include <comfyui/icons.h>
 #include "comfyui/easings.h"
 
 class ComfyUIButton : public ComfyUIElement {
