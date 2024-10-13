@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <LinkedList.h>
 
-// #define DEBUG
+#define DEBUG
 
 struct Command {
     String name;

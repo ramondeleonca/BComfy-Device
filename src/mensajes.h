@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-const String mensajes[] = {
+const char* mensajes[] = {
     "Cree en ti mismo, siempre.",
     "Hazlo con pasion o no lo hagas.",
     "Cada dia es una nueva oportunidad.",

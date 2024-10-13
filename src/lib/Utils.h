@@ -16,6 +16,15 @@ class Utils {
                     return index;
                 }
         };
+        
+        class Time {
+            public:
+                static String getCurrentTime() {
+                    ulong currentTime = millis();
+                    ulong seconds = currentTime / 1000;
+                    return String(seconds);
+                }
+        };
 };
 
 #endif

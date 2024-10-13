@@ -6,27 +6,25 @@
 #include <OpenAI.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
-#include <Preferences.h>
+// #include <Preferences.h>
 #include <BluetoothSerial.h>
-#include <ESP32Time.h>
 #include <WS2812FX.h>
 #include "aikey.h"
-#include "lib/SIM800L.h"
 #include "hal/PushButton.cpp"
-#include "hal/VibrationMotor.cpp"
-#include "hal/Potentiometer.cpp"
-#include "hal/Buzzer.cpp"
+// #include "hal/VibrationMotor.cpp"
+// #include "hal/Potentiometer.cpp"
+// #include "hal/Buzzer.cpp"
 #include "lib/Commands.h"
 #include "comfyui/icons.h"
 #include "lib/Utils.h"
-#include "lib/BComfySettings.h"
+// #include "lib/BComfySettings.h"
 #include "data.h"
 #include "mensajes.h"
-#include "FS.h"
-#include "SPIFFS.h"
+// #include "FS.h"
 #include <LinkedList.h>
 #include <TinyGPSPlus.h>
 #include <SPIFFS.h>
+#include <Esp.h>
 
 // Device config
 const String PRODUCT_NAME = "BComfy";
@@ -37,19 +35,46 @@ const String DEVICE_NAME = PRODUCT_NAME + "." + DEVICE_ID;
 
 // AI Config
 // * PROVISION API KEY IN aikey.h
-const String OPENAI_API_KEY = AI_KEY;
-const String OPENAI_MODEL = "gpt-4o-mini";
-const String OPENAI_CHAT_SYSTEM = "Tu trabajo es generar frases motivacionales, cada una de menos de 8 palabras para una persona con ansiedad y TDAH. Se enviará el numero de frases que debe generar y debe responder con esa cantidad de frases separadas por un salto de linea";
-const int OPENAI_CHAT_TOKENS = 350;
+const char* OPENAI_MODEL = "gpt-4o-mini";
+const char* OPENAI_CHAT_SYSTEM = "Tu trabajo es generar frases motivacionales, cada una de menos de 8 palabras para una persona con ansiedad y TDAH. Se enviará el numero de frases que debe generar y debe responder con esa cantidad de frases separadas por un salto de linea";
+const int OPENAI_CHAT_TOKENS = 500;
 const float OPENAI_CHAT_TEMPERATURE = 0.85;
 const float OPENAI_CHAT_PRESENCE_PENALTY = 0.1;
 const float OPENAI_CHAT_FREQUENCY_PENALTY = 0;
-OpenAI openai(OPENAI_API_KEY.c_str());
+OpenAI openai(AI_KEY);
 OpenAI_ChatCompletion chat(openai);
 
 // Messages array
-String messages[10] = {};
-const String FN_MessagesFile = "messages.txt";
+const int messagesCount = 1;
+String messages[messagesCount];
+const String FN_MessagesFile = "/messages.txt";
+
+void reqNewMessages() {
+    String res = chat.message(String(messagesCount)).getAt(0);
+    // File file = SPIFFS.open(FN_MessagesFile, FILE_APPEND);
+    // file.print(res);
+
+    // // Put each phrase in the messages array (separated by newline)
+    // uint last = 0;
+    // for (uint i = 0; i < res.length(); i++) {
+    //     uint nl = res.indexOf('\n', last);
+    //     if (nl != -1) {
+    //         messages[i] = res.substring(last, nl - 1);
+    //         last = nl;
+    //     } else {
+    //         messages[i] = res.substring(last, res.length());
+    //     }
+    // }
+    Serial.println(res);
+}
+
+TaskHandle_t newMessagesLoopHandle;
+void newMessagesLoop(void* params) {
+    while (true) {
+        reqNewMessages();
+        delay(15 * 1000 * 60);
+    }
+}
 
 // Displays config
 // * BIG DISPLAY
@@ -79,13 +104,8 @@ const String screens[] = {"Llamada", "Mensajes", "Juego", "Configuracion"};
 const int screensSize = sizeof(screens) / sizeof(screens[0]);
 int currentScreen = 0;
 
-// Settings
-
-// Create an esp32time object
-ESP32Time rtc;
-
 // Preferences
-Preferences preferences;
+// Preferences preferences;
 
 // Bluetooth Serial
 BluetoothSerial SerialBT;
@@ -104,10 +124,10 @@ PushButton okButton(27);
 // Potentiometer potentiometer(15);
 
 // Vibration motor
-VibrationMotor vibrationMotor(4);
+// VibrationMotor vibrationMotor(4);
 
 // Buzzer
-Buzzer buzzer(5);
+// Buzzer buzzer(5);
 
 // SimSerial
 const int SIM_RX = 4;
@@ -154,7 +174,7 @@ void backgroundTask(void* params) {
         while (neogps.available()) gps.encode(neogps.read());
 
         // Check SMS
-        Serial.println("Checking for new SMS...");
+        // Serial.println("Checking for new SMS...");
         SIM800lSerial.println("AT+CMGL=\"REC UNREAD\"");
         delay(500);
 
@@ -164,8 +184,8 @@ void backgroundTask(void* params) {
             response += c;
         }
         
-        Serial.print("SIM800 Response: ");
-        Serial.println(response);
+        // Serial.print("SIM800 Response: ");
+        // Serial.println(response);
 
         if (response.indexOf("+CMTI") != -1) {
             // SMS found, sending location
@@ -183,14 +203,17 @@ void backgroundTask(void* params) {
             SIM800lSerial.write(0x1A);
 
         } else {
-            Serial.println("No unread SMS found.");
+            // Serial.println("No unread SMS found.");
+        }
+
+        // Connect to wifi if not connected
+        if (WiFi.status() != WL_CONNECTED) {
+            WiFi.begin(WIFI_SSID, WIFI_PASS);
         }
 
         delay(2000);
     }
 }
-
-// TODO: BACKGROUND TASK FOR SMS
 
 void registerCommands(Commands commands) {
     commands.addCommand("get_mac", [](Stream *serial, LinkedList<String> args) {
@@ -218,11 +241,47 @@ void setup() {
     Serial.begin(115200);
 
     // Init preferences
-    preferences.begin(PRODUCT_NAME.c_str(), false);
+    // preferences.begin(PRODUCT_NAME.c_str(), false);
+
+    // Init AI
+    chat.setModel(OPENAI_MODEL);   //Model to use for completion. Default is gpt-3.5-turbo
+    chat.setSystem(OPENAI_CHAT_SYSTEM);      //Description of the required assistant
+    chat.setMaxTokens(OPENAI_CHAT_TOKENS);          //The maximum number of tokens to generate in the completion.
+    chat.setTemperature(OPENAI_CHAT_TEMPERATURE);         //float between 0 and 2. Higher value gives more random results.
+    chat.setStop("\r");               //Up to 4 sequences where the API will stop generating further tokens.
+    chat.setPresencePenalty(OPENAI_CHAT_FREQUENCY_PENALTY);       //float between -2.0 and 2.0. Positive values increase the model's likelihood to talk about new topics.
+    chat.setFrequencyPenalty(OPENAI_CHAT_FREQUENCY_PENALTY);      //float between -2.0 and 2.0. Positive values decrease the model's likelihood to repeat the same line verbatim.
+    chat.setUser(WiFi.macAddress().c_str());     //A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse.
 
     // Init SPIFFS
-    if (!SPIFFS.begin()) {
+    if (!SPIFFS.begin(true)) {
         Serial.println("SPIFFS FAILED, PANIC");
+    }
+
+    if (!SPIFFS.exists(FN_MessagesFile)) {
+        File file = SPIFFS.open(FN_MessagesFile, FILE_APPEND);
+        if (WiFi.status() != WL_CONNECTED) {
+            for (int i = 0; i < sizeof(mensajes) / sizeof(mensajes[0]); i++) file.println(mensajes[i]);
+        } else {
+            
+        }
+        file.close();
+    };
+
+    // Init WiFi
+    // try connecting 3 times in 100ms intervals before giving up
+    WiFi.setAutoReconnect(true);
+    WiFi.setMinSecurity(WIFI_AUTH_OPEN);
+    WiFi.useStaticBuffers();
+    WiFi.mode(WIFI_STA);
+    WiFi.setHostname(DEVICE_NAME.c_str());
+    
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    if (WiFi.waitForConnectResult() == WL_CONNECTED) {
+        Serial.println("Connected to WiFi");
+        reqNewMessages();
+    } else {
+        Serial.println("Failed to connect to WiFi");
     }
 
     // Load persistent variables
@@ -269,7 +328,7 @@ void setup() {
     });
 
     // Final bootup
-    vibrationMotor.vibrate(500);
+    // vibrationMotor.vibrate(500);
 
     // Set LED Strip state
     delay(500);
@@ -282,8 +341,9 @@ void setup() {
     ledEffectDuration = -1;
     ledStart = millis();
 
-    // Start background task
+    // Start background tasks
     xTaskCreate(backgroundTask, "backgroundTask", 4096, NULL, 1, &backgroundTaskHandle);
+    xTaskCreate(newMessagesLoop, "newMessagesLoop", 4096, NULL, 1, &newMessagesLoopHandle);
 }
 
 String currentMessage = "";
@@ -473,8 +533,8 @@ class BigDisplayUI {
                                 leds.start();
                                 ledStart = millis();
                                 ledEffectDuration = 500;
-                                buzzer.beep(500, 250);
-                                vibrationMotor.vibrate(500);
+                                // buzzer.beep(500, 250);
+                                // vibrationMotor.vibrate(500);
                                 gameStart = -1;
                             }
                         } else {
@@ -538,6 +598,8 @@ class BigDisplayUI {
                     bigDisplay.drawBitmap((BIG_DISPLAY_WIDTH / 2) + (w / 2) + 2, 15, arrow_right, arrow_right_width, arrow_right_height, SSD1306_WHITE);
 
                     okButton.setOnRising([]() {
+                        // ! I CHANGED THIS
+                        cacti.clear();
                         gameStart = millis();
                     });
 
@@ -595,7 +657,7 @@ class SmallDisplayUI {
 
         static void renderBottomBar() {
             // TODO: Make time blink
-            String time = rtc.getTime("%H:%M:%S");
+            String time = Utils::Time::getCurrentTime();
             int16_t _;
             uint16_t w, h;
             smallDisplay.getTextBounds(time, 0, 0, &_, &_, &w, &h);
@@ -623,6 +685,10 @@ void loop() {
     // vibrationMotor.service();
     // buzzer.service();
 
+    // Serial commands
+    if (Serial.available()) serialCommands.readSerial();
+    if (SerialBT.available()) bluetoothCommands.readSerial();
+
     // Displays
     // * BIG DISPLAY
     BigDisplayUI::render();
@@ -630,13 +696,12 @@ void loop() {
     // * SMALL DISPLAY
     SmallDisplayUI::render();
 
-    // Serial commands
-    if (Serial.available()) serialCommands.readSerial();
-    if (SerialBT.available()) bluetoothCommands.readSerial();
-
     // LED Strip
     if (millis() - ledStart > ledEffectDuration) leds.setColor(0);
     leds.service();
+
+    Serial.print("FREE MEM: ");
+    Serial.println(ESP.getFreeHeap() / ESP.getHeapSize());
 }
 
 #endif
